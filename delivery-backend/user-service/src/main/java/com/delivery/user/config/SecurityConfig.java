@@ -34,10 +34,20 @@ public class SecurityConfig {
                 // Make session stateless since we use JWT
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Allow public access to Auth and Register endpoints
-                        .requestMatchers("/api/auth/**", "/api/users").permitAll()
-                        // Require authentication for all profile endpoints
+                        // Public endpoints
+                        .requestMatchers(
+                                "/api/auth/login",
+                                "/api/auth/refresh",
+                                "/api/users"
+                        ).permitAll()
+
+                        // Logout requires authentication
+                        .requestMatchers("/api/auth/logout").authenticated()
+
+                        // Protected user endpoints
                         .requestMatchers("/api/users/me/**").authenticated()
+
+                        // Everything else requires authentication
                         .anyRequest().authenticated()
                 )
                 // Insert our JWT filter BEFORE the standard Spring Security password filter

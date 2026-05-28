@@ -21,3 +21,8 @@ jwt:
   access-expiration: ${JWT_ACCESS_EXPIRATION:3600000}
   # Default to 7 days
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}

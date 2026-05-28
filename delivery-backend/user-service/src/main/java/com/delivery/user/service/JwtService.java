@@ -87,4 +87,14 @@ public class JwtService {
                 .getPayload()
                 .getSubject();
     }
+
+    // Extract the exact expiration date of the token
+    public Date extractExpiration(String token) {
+        return Jwts.parser()
+                .verifyWith((SecretKey) getSignInKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .getExpiration();
+    }
 }

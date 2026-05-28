@@ -4,6 +4,8 @@ import com.delivery.user.dto.ChangePasswordRequest;
 import com.delivery.user.dto.UpdateProfileRequest;
 import com.delivery.user.dto.UserCreationRequest;
 import com.delivery.user.dto.UserResponse;
+import com.delivery.user.service.JwtService;
+import com.delivery.user.service.TokenBlacklistService;
 import com.delivery.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +19,8 @@ import java.security.Principal;
 public class UserController {
 
     private final UserService userService;
+    private final JwtService jwtService;
+    private final TokenBlacklistService tokenBlacklistService;
 
     // API: Create new user (POST http://localhost:8081/api/users)
     @PostMapping
@@ -40,8 +44,22 @@ public class UserController {
 
     // Change my password
     @PutMapping("/me/password")
-    public ResponseEntity<String> changePassword(Principal principal, @RequestBody ChangePasswordRequest request) {
+    public ResponseEntity<String> changePassword(
+            Principal principal,
+            @RequestBody ChangePasswordRequest request,
+            jakarta.servlet.http.HttpServletRequest httpRequest) {
+
+        // 1. Change password in DB
         userService.changePassword(principal.getName(), request);
-        return ResponseEntity.ok("Password changed successfully");
+
+        // 2. Blacklist the current token so it can't be used again
+        String authHeader = httpRequest.getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7);
+            java.util.Date expiration = jwtService.extractExpiration(token);
+            tokenBlacklistService.addToBlacklist(token, expiration.getTime());
+        }
+
+        return ResponseEntity.ok("Password changed successfully. Please login again.");
     }
 }

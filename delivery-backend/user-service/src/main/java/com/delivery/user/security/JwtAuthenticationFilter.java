@@ -1,6 +1,7 @@
 package com.delivery.user.security;
 
 import com.delivery.user.service.JwtService;
+import com.delivery.user.service.TokenBlacklistService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,6 +21,7 @@ import java.util.ArrayList;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final TokenBlacklistService tokenBlacklistService; // Inject Redis Service
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -30,29 +32,30 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         final String jwt;
         final String userId;
 
-        // 1. Check if header exists and starts with "Bearer "
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // 2. Extract the token
         jwt = authHeader.substring(7);
 
-        // 3. Validate token and extract User ID
+        // --- NEW: REDIS BLACKLIST CHECK ---
+        if (tokenBlacklistService.isBlacklisted(jwt)) {
+            // If token is in Redis, block the request immediately
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
+            response.getWriter().write("{\"error\": \"Token has been revoked. Please login again.\"}");
+            return;
+        }
+        // ----------------------------------
+
         if (jwtService.isTokenValid(jwt) && SecurityContextHolder.getContext().getAuthentication() == null) {
             userId = jwtService.extractUserId(jwt);
 
-            // 4. Create an authentication object (We use userId as the Principal)
             UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                    userId,
-                    null,
-                    new ArrayList<>() // We can add roles here later if needed for role-based access
+                    userId, null, new ArrayList<>()
             );
-
             authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-
-            // 5. Save the authentication in the Security Context
             SecurityContextHolder.getContext().setAuthentication(authToken);
         }
 
