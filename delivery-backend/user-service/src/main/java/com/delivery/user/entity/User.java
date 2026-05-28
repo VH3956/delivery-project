@@ -50,7 +50,7 @@ public class User {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    // Định nghĩa Enum ngay trong class (hoặc bạn có thể tách ra file Role.java riêng)
+    // Enum in class
     public enum Role {
         ADMIN, CUSTOMER, SHIPPER
     }

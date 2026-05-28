@@ -38,7 +38,11 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/auth/login",
                                 "/api/auth/refresh",
-                                "/api/users"
+                                "/api/users",
+                                "/v3/api-docs",
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html"
                         ).permitAll()
 
                         // Logout requires authentication
@@ -46,6 +50,10 @@ public class SecurityConfig {
 
                         // Protected user endpoints
                         .requestMatchers("/api/users/me/**").authenticated()
+                        .requestMatchers("/api/shippers/me/**").authenticated()
+
+                        // Only admin can access admin endpoint
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
                         // Everything else requires authentication
                         .anyRequest().authenticated()

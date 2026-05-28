@@ -13,6 +13,9 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import java.util.Collections;
+
 import java.io.IOException;
 import java.util.ArrayList;
 
@@ -52,8 +55,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (jwtService.isTokenValid(jwt) && SecurityContextHolder.getContext().getAuthentication() == null) {
             userId = jwtService.extractUserId(jwt);
 
+            // --- NEW: Extract role and grant authority ---
+            String role = jwtService.extractRole(jwt);
+            var authorities = java.util.Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role));
+
             UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                    userId, null, new ArrayList<>()
+                    userId, null, authorities // Pass the authorities here!
             );
             authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(authToken);

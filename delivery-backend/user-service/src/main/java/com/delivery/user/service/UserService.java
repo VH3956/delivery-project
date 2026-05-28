@@ -23,6 +23,14 @@ public class UserService {
             throw new RuntimeException("Phone number is already in use!");
         }
 
+        // Parse the requested role
+        User.Role requestedRole = User.Role.valueOf(request.getRole().toUpperCase());
+
+        // SECURITY FIX: Block anyone from registering as an ADMIN via the public API
+        if (requestedRole == User.Role.ADMIN) {
+            throw new RuntimeException("Unauthorized: Cannot register as ADMIN via public API");
+        }
+
         // 2. Map DTO to Entity and hash the password
         User newUser = User.builder()
                 .phone(request.getPhone())
@@ -30,7 +38,7 @@ public class UserService {
                 // Hash the password before saving
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .fullName(request.getFullName())
-                .role(User.Role.valueOf(request.getRole().toUpperCase()))
+                .role(requestedRole)
                 .isActive(true)
                 .build();
 
@@ -91,5 +99,52 @@ public class UserService {
         // Save new hashed password
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
+    }
+
+    // Admin: Lock or Unlock a user account
+    public UserResponse toggleUserStatus(String userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        user.setActive(!user.isActive());
+        User savedUser = userRepository.save(user);
+
+        return UserResponse.builder()
+                .id(savedUser.getId())
+                .phone(savedUser.getPhone())
+                .email(savedUser.getEmail())
+                .fullName(savedUser.getFullName())
+                .role(savedUser.getRole().name())
+                .createdAt(savedUser.getCreatedAt())
+                .build();
+    }
+
+    // Method specifically for Admins to create any user type (including other Admins)
+    public UserResponse createUserByAdmin(UserCreationRequest request) {
+        if (userRepository.existsByPhone(request.getPhone())) {
+            throw new RuntimeException("Phone number is already in use!");
+        }
+
+        User.Role requestedRole = User.Role.valueOf(request.getRole().toUpperCase());
+
+        User newUser = User.builder()
+                .phone(request.getPhone())
+                .email(request.getEmail())
+                .passwordHash(passwordEncoder.encode(request.getPassword()))
+                .fullName(request.getFullName())
+                .role(requestedRole) // Allows ADMIN, SHIPPER, or CUSTOMER
+                .isActive(true)
+                .build();
+
+        User savedUser = userRepository.save(newUser);
+
+        return UserResponse.builder()
+                .id(savedUser.getId())
+                .phone(savedUser.getPhone())
+                .email(savedUser.getEmail())
+                .fullName(savedUser.getFullName())
+                .role(savedUser.getRole().name())
+                .createdAt(savedUser.getCreatedAt())
+                .build();
     }
 }

@@ -1,9 +1,7 @@
 package com.delivery.user.controller;
 
-import com.delivery.user.dto.ChangePasswordRequest;
-import com.delivery.user.dto.UpdateProfileRequest;
-import com.delivery.user.dto.UserCreationRequest;
-import com.delivery.user.dto.UserResponse;
+import com.delivery.user.dto.*;
+import com.delivery.user.service.AddressService;
 import com.delivery.user.service.JwtService;
 import com.delivery.user.service.TokenBlacklistService;
 import com.delivery.user.service.UserService;
@@ -21,6 +19,8 @@ public class UserController {
     private final UserService userService;
     private final JwtService jwtService;
     private final TokenBlacklistService tokenBlacklistService;
+
+    private final AddressService addressService;
 
     // API: Create new user (POST http://localhost:8081/api/users)
     @PostMapping
@@ -61,5 +61,26 @@ public class UserController {
         }
 
         return ResponseEntity.ok("Password changed successfully. Please login again.");
+    }
+
+    //addresses
+    @PostMapping("/me/addresses")
+    public ResponseEntity<AddressResponse> addAddress(
+            Principal principal,
+            @RequestBody AddressRequest request) {
+        return ResponseEntity.ok(addressService.addAddress(principal.getName(), request));
+    }
+
+    @GetMapping("/me/addresses")
+    public ResponseEntity<java.util.List<AddressResponse>> getMyAddresses(Principal principal) {
+        return ResponseEntity.ok(addressService.getUserAddresses(principal.getName()));
+    }
+
+    @DeleteMapping("/me/addresses/{addressId}")
+    public ResponseEntity<String> deleteAddress(
+            Principal principal,
+            @PathVariable String addressId) {
+        addressService.deleteAddress(principal.getName(), addressId);
+        return ResponseEntity.ok("Address deleted successfully");
     }
 }

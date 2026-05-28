@@ -97,4 +97,14 @@ public class JwtService {
                 .getPayload()
                 .getExpiration();
     }
+
+    // Extract Role from the token
+    public String extractRole(String token) {
+        return Jwts.parser()
+                .verifyWith((SecretKey) getSignInKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .get("role", String.class);
+    }
 }
