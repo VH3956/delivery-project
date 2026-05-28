@@ -1,14 +1,23 @@
 server:
-  port: 8081 # user-service run 8081
+  port: 8081
 
 spring:
   application:
     name: user-service
   datasource:
-    url: jdbc:mysql://localhost:3307/delivery_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-    username: delivery_user       # Match with docker-compose
-    password: delivery_password   # Match with file docker-compose
+    # Use environment variables for DB credentials, fallback to defaults for local dev
+    url: jdbc:mysql://${DB_HOST:localhost}:3307/delivery_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: ${DB_USER:delivery_user}
+    password: ${DB_PASSWORD:delivery_password}
   jpa:
     hibernate:
-      ddl-auto: update # Spring Boot auto deploy table
+      ddl-auto: update
     show-sql: true
+
+jwt:
+  # NO default value for the secret. This forces the app to fail if the secret is missing (Safe practice)
+  secret: ${JWT_SECRET}
+  # Default to 1 hour
+  access-expiration: ${JWT_ACCESS_EXPIRATION:3600000}
+  # Default to 7 days
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
