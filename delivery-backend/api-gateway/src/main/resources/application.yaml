@@ -1,0 +1,24 @@
+server:
+  port: 9090
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+      routes:
+        # Route all Authentication and User endpoints to the user-service
+        - id: user-service-route
+          uri: lb://USER-SERVICE  # Must match the spring.application.name of user-service
+          predicates:
+            - Path=/api/auth/**, /api/users/**, /api/shippers/**, /api/admin/**
+
+        # We will add order-service and delivery-service routes here later
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
