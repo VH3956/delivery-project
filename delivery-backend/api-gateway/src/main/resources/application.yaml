@@ -16,6 +16,12 @@ spring:
           predicates:
             - Path=/api/auth/**, /api/users/**, /api/shippers/**, /api/admin/**
 
+        # Route Order Service (NEW)
+        - id: order-service-route
+          uri: lb://ORDER-SERVICE
+          predicates:
+            - Path=/api/orders/**
+
         # We will add order-service and delivery-service routes here later
 
 eureka:

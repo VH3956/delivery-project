@@ -8,6 +8,7 @@ COPY pom.xml .
 COPY api-gateway ./api-gateway
 COPY eureka-server ./eureka-server
 COPY user-service ./user-service
+COPY order-service ./order-service
 
 RUN mvn clean package -pl user-service -am -DskipTests
 

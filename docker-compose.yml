@@ -89,7 +89,6 @@ services:
     env_file:
       - .env
     environment:
-      # Notice we match the service names from the infrastructure block above
       - DB_HOST=mysql
       - DB_PORT=3306  # Internally
       - DB_USER=delivery_user
@@ -101,6 +100,30 @@ services:
       - mysql
       - redis
       - eureka-server
+    restart: on-failure
+
+  # 8. Order Service
+  order-service:
+    build:
+      context: ./delivery-backend
+      dockerfile: order-service/Dockerfile
+    container_name: delivery_order_service
+    ports:
+      - "8082:8082"
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=delivery_user
+      - DB_PASSWORD=delivery_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
+    depends_on:
+      - mysql
+      - eureka-server
+    restart: on-failure
 
 volumes:
   mysql_data:
