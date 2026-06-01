@@ -1,0 +1,23 @@
+# Stage 1: Build
+FROM maven:3.9.6-eclipse-temurin-17 AS builder
+
+WORKDIR /app
+
+COPY pom.xml .
+
+COPY api-gateway ./api-gateway
+COPY eureka-server ./eureka-server
+COPY user-service ./user-service
+
+RUN mvn clean package -pl api-gateway -am -DskipTests
+
+# Stage 2: Run
+FROM eclipse-temurin:17-jre-alpine
+
+WORKDIR /app
+
+COPY --from=builder /app/api-gateway/target/*.jar app.jar
+
+EXPOSE 9090
+
+ENTRYPOINT ["java", "-jar", "app.jar"]

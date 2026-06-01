@@ -22,6 +22,12 @@
         <spring-cloud.version>2023.0.1</spring-cloud.version>
     </properties>
 
+    <modules>
+        <module>api-gateway</module>
+        <module>eureka-server</module>
+        <module>user-service</module>
+    </modules>
+
     <dependencyManagement>
         <dependencies>
             <dependency>

@@ -1,6 +1,8 @@
-version: '3.8'
-
 services:
+  # ==========================================
+  # INFRASTRUCTURE (Your Original Setup)
+  # ==========================================
+  
   # 1. MySQL Database
   mysql:
     image: mysql:8.0
@@ -11,7 +13,7 @@ services:
       MYSQL_USER: delivery_user
       MYSQL_PASSWORD: delivery_password
     ports:
-      - "3307:3306"
+      - "3307:3306" # Host port 3307, Container port 3306
     volumes:
       - mysql_data:/var/lib/mysql
     restart: unless-stopped
@@ -49,6 +51,56 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  # ==========================================
+  # SPRING BOOT MICROSERVICES
+  # ==========================================
+
+  # 5. Eureka Service Registry
+  eureka-server:
+    build:
+      context: ./delivery-backend
+      dockerfile: eureka-server/Dockerfile
+    container_name: delivery_eureka
+    ports:
+      - "8761:8761"
+
+  # 6. API Gateway
+  api-gateway:
+    build:
+      context: ./delivery-backend
+      dockerfile: api-gateway/Dockerfile
+    container_name: delivery_gateway
+    ports:
+      - "9090:9090"
+    environment:
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
+    depends_on:
+      - eureka-server
+
+  # 7. User Service
+  user-service:
+    build:
+      context: ./delivery-backend
+      dockerfile: user-service/Dockerfile
+    container_name: delivery_user_service
+    ports:
+      - "8081:8081"
+    env_file:
+      - .env
+    environment:
+      # Notice we match the service names from the infrastructure block above
+      - DB_HOST=mysql
+      - DB_PORT=3306  # Internally
+      - DB_USER=delivery_user
+      - DB_PASSWORD=delivery_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
+    depends_on:
+      - mysql
+      - redis
+      - eureka-server
 
 volumes:
   mysql_data:
