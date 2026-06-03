@@ -1,5 +1,6 @@
 package com.delivery.user.service;
 
+import com.delivery.user.dto.AddressCoordinatesDto;
 import com.delivery.user.dto.AddressRequest;
 import com.delivery.user.dto.AddressResponse;
 import com.delivery.user.entity.Address;
@@ -85,6 +86,17 @@ public class AddressService {
                 .latitude(address.getLatitude())
                 .longitude(address.getLongitude())
                 .isDefault(address.isDefault())
+                .build();
+    }
+
+    // Add this to your AddressService.java
+    public AddressCoordinatesDto getCoordinates(String addressId) {
+        Address address = addressRepository.findById(addressId)
+                .orElseThrow(() -> new RuntimeException("Address not found"));
+
+        return AddressCoordinatesDto.builder()
+                .latitude(address.getLatitude())
+                .longitude(address.getLongitude())
                 .build();
     }
 }

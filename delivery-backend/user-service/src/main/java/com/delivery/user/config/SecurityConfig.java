@@ -48,6 +48,9 @@ public class SecurityConfig {
                         // Logout requires authentication
                         .requestMatchers("/api/auth/logout").authenticated()
 
+                        // Allow INTERNAL microservice communication without tokens!
+                        .requestMatchers("/api/internal/**").permitAll()
+
                         // Protected user endpoints
                         .requestMatchers("/api/users/me/**").authenticated()
                         .requestMatchers("/api/shippers/me/**").authenticated()

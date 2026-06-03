@@ -6,7 +6,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.security.Principal;
 
 @RestController
 @RequestMapping("/api/delivery/location")
@@ -19,7 +22,6 @@ public class LocationController {
     // The JSON body the phone will send us
     @Data
     public static class LocationUpdateRequest {
-        private String shipperId; // In a real app, extract this from the JWT token!
         private double longitude;
         private double latitude;
     }
@@ -27,12 +29,19 @@ public class LocationController {
     @Operation(summary = "Update shipper location",
             description = "Update real-time GPS location of a shipper")
     @PostMapping("/update")
-    public ResponseEntity<String> updateLocation(@RequestBody LocationUpdateRequest request) {
+    @PreAuthorize("hasRole('SHIPPER')") // Only verified Shippers can call this
+    public ResponseEntity<String> updateLocation(
+            @RequestBody LocationUpdateRequest request,
+            Principal principal) { // Spring automatically injects the token data here!
+
+        // Extract the real, un-fakeable ID from the Token
+        String shipperId = principal.getName();
+
         locationTrackingService.updateDriverLocation(
-                request.getShipperId(),
+                shipperId,
                 request.getLongitude(),
                 request.getLatitude()
         );
-        return ResponseEntity.ok("Location updated successfully");
+        return ResponseEntity.ok("Location updated for Shipper: " + shipperId);
     }
 }
