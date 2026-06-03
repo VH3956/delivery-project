@@ -4,6 +4,11 @@ import com.delivery.order.dto.OrderRequest;
 import com.delivery.order.dto.OrderResponse;
 import com.delivery.order.dto.OrderStatusUpdateRequest;
 import com.delivery.order.service.OrderService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -17,21 +22,26 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
+@Tag(name = "Orders", description = "Order Management API")
+@SecurityRequirement(name = "bearerAuth")
 public class OrderController {
 
     private final OrderService orderService;
 
-    // 1. Create a new Order
+    @Operation(summary = "Create a new order", description = "Customers can create a new delivery order")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Order created successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid input")
+    })
     @PostMapping
     @PreAuthorize("hasRole('CUSTOMER')")
     public ResponseEntity<OrderResponse> createOrder(@RequestBody @Valid OrderRequest request, Principal principal) {
-        // principal.getName() securely returns the UUID from the JWT token!
         String customerId = principal.getName();
         OrderResponse response = orderService.createOrder(request, customerId);
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
-    // 2. View my order history
+    @Operation(summary = "Get my orders", description = "Retrieve order history for the logged-in customer")
     @GetMapping("/me")
     @PreAuthorize("hasRole('CUSTOMER')")
     public ResponseEntity<List<OrderResponse>> getMyOrders(Principal principal) {
@@ -39,7 +49,7 @@ public class OrderController {
         return ResponseEntity.ok(orderService.getCustomerOrders(customerId));
     }
 
-    // 3. View a specific order
+    @Operation(summary = "Get order details", description = "Get details of a specific order")
     @GetMapping("/{orderId}")
     @PreAuthorize("hasRole('CUSTOMER')")
     public ResponseEntity<OrderResponse> getOrderDetails(@PathVariable String orderId, Principal principal) {
@@ -51,14 +61,14 @@ public class OrderController {
     // SHIPPER APIs
     // ==========================================
 
-    // 4. View Job Board (All unassigned orders)
+    @Operation(summary = "Get available orders", description = "Shippers can view all unassigned orders")
     @GetMapping("/available")
     @PreAuthorize("hasRole('SHIPPER')")
     public ResponseEntity<List<OrderResponse>> getAvailableOrders() {
         return ResponseEntity.ok(orderService.getAvailableOrdersForShippers());
     }
 
-    // 5. Accept an Order
+    @Operation(summary = "Accept order", description = "Shipper accepts an available order")
     @PatchMapping("/{orderId}/accept")
     @PreAuthorize("hasRole('SHIPPER')")
     public ResponseEntity<OrderResponse> acceptOrder(@PathVariable String orderId, Principal principal) {
@@ -66,7 +76,7 @@ public class OrderController {
         return ResponseEntity.ok(orderService.acceptOrder(orderId, shipperId));
     }
 
-    // 6. Update Order Status (Picked Up, In Transit, Delivered)
+    @Operation(summary = "Update order status", description = "Shipper updates order status (Picked Up, In Transit, Delivered)")
     @PatchMapping("/{orderId}/status")
     @PreAuthorize("hasRole('SHIPPER')")
     public ResponseEntity<OrderResponse> updateOrderStatus(
