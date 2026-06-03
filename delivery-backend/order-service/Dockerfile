@@ -9,6 +9,7 @@ COPY api-gateway ./api-gateway
 COPY eureka-server ./eureka-server
 COPY user-service ./user-service
 COPY order-service ./order-service
+COPY delivery-service ./delivery-service
 
 RUN mvn clean package -pl order-service -am -DskipTests
 

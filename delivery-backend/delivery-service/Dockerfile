@@ -11,15 +11,15 @@ COPY user-service ./user-service
 COPY order-service ./order-service
 COPY delivery-service ./delivery-service
 
-RUN mvn clean package -pl api-gateway -am -DskipTests
+RUN mvn clean package -pl delivery-service -am -DskipTests
 
 # Stage 2: Run
 FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-COPY --from=builder /app/api-gateway/target/*.jar app.jar
+COPY --from=builder /app/delivery-service/target/*.jar app.jar
 
-EXPOSE 9090
+EXPOSE 8083
 
 ENTRYPOINT ["java", "-jar", "app.jar"]

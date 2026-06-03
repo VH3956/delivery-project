@@ -6,6 +6,7 @@ import com.delivery.order.dto.OrderStatusUpdateRequest;
 import com.delivery.order.entity.Order;
 import com.delivery.order.entity.OrderTimeline;
 import com.delivery.order.enums.OrderStatus;
+import com.delivery.order.event.OrderCreatedEvent;
 import com.delivery.order.repository.OrderRepository;
 import com.delivery.order.repository.OrderTimelineRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ public class OrderServiceImpl implements OrderService {
 
     private final OrderRepository orderRepository;
     private final OrderTimelineRepository orderTimelineRepository;
+    private final OrderEventProducer orderEventProducer;
 
     @Override
     @Transactional
@@ -67,6 +69,15 @@ public class OrderServiceImpl implements OrderService {
                 .description("Order has been created successfully. Searching for nearby drivers.")
                 .build();
         orderTimelineRepository.save(initialTimeline);
+
+        OrderCreatedEvent event = OrderCreatedEvent.builder()
+                .orderId(savedOrder.getId())
+                .pickupAddressId(savedOrder.getPickupAddressId())
+                .deliveryAddressId(savedOrder.getDeliveryAddressId())
+                .deliveryFee(savedOrder.getDeliveryFee())
+                .build();
+
+        orderEventProducer.publishOrderCreatedEvent(event);
 
         return mapToResponse(savedOrder);
     }

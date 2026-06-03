@@ -1,0 +1,31 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: delivery-service
+
+  # Connect to Redis for Geo Tracking
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+  # Connect to Kafka as a Consumer
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: delivery-dispatch-group-v2
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*" # Allows reading the JSON sent by order-service
+        spring.json.value.default.type: com.delivery.dispatch.event.OrderCreatedEvent
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: true

@@ -22,7 +22,11 @@ spring:
           predicates:
             - Path=/api/orders/**
 
-        # We will add order-service and delivery-service routes here later
+        # Route Delivery Service (NEW)
+        - id: delivery-service-route
+          uri: lb://DELIVERY-SERVICE
+          predicates:
+            - Path=/api/delivery/**
 
 eureka:
   client:
