@@ -4,6 +4,7 @@ import com.delivery.dispatch.event.OrderCreatedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -15,6 +16,7 @@ public class OrderEventListener {
 
     private final LocationTrackingService locationTrackingService;
     private final AddressResolverService addressResolverService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @KafkaListener(topics = "order-created-topic", groupId = "delivery-dispatch-group-v2")
     public void handleOrderCreatedEvent(OrderCreatedEvent event) {
@@ -39,9 +41,13 @@ public class OrderEventListener {
             // In a real app, you might wait 30 seconds and retry, or expand the radius to 10km!
         } else {
             log.info("✅ Found {} drivers nearby!", nearbyDrivers.size());
+
             for (String driverId : nearbyDrivers) {
-                // In a real app, you would send a WebSocket or Firebase Push Notification to the driver's phone here
-                log.info(" 🚀 PUSH NOTIFICATION SENT TO DRIVER: {}", driverId);
+                log.info(" 🚀 PUSHING REAL-TIME WEBSOCKET NOTIFICATION TO: {}", driverId);
+
+                // It sends the Order ID down the exact tunnel the Shipper is listening to.
+                String destinationTopic = "/topic/driver/" + driverId;
+                messagingTemplate.convertAndSend(destinationTopic, event.getOrderId());
             }
         }
         log.info("=======================================================");

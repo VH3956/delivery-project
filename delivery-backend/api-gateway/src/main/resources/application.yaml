@@ -6,6 +6,18 @@ spring:
     name: api-gateway
   cloud:
     gateway:
+      globalcors:
+        add-to-simple-url-handler-mapping: true # Helps with WebSocket handshake
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: 
+              - "*"
+            allowedMethods: 
+              - "*"
+            allowedHeaders: 
+              - "*"
+            allowCredentials: true
+            
       discovery:
         locator:
           enabled: true
@@ -26,7 +38,7 @@ spring:
         - id: delivery-service-route
           uri: lb://DELIVERY-SERVICE
           predicates:
-            - Path=/api/delivery/**
+            - Path=/api/delivery/**, /ws/delivery/**
 
 eureka:
   client:
