@@ -1,44 +1,69 @@
 services:
-  # ==========================================
-  # INFRASTRUCTURE (Your Original Setup)
-  # ==========================================
-  
-  # 1. MySQL Database
+  # ==================== INFRASTRUCTURE ====================
+
   mysql:
     image: mysql:8.0
     container_name: delivery_mysql
+    restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: delivery_db
       MYSQL_USER: delivery_user
       MYSQL_PASSWORD: delivery_password
     ports:
-      - "3307:3306" # Host port 3307, Container port 3306
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.3'
+          memory: 256M
 
-  # 2. Redis (Caching, OTP, Geo-location)
   redis:
     image: redis:7.0-alpine
     container_name: delivery_redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 256M
+        reservations:
+          cpus: '0.2'
+          memory: 128M
 
-  # 3. Zookeeper
   zookeeper:
     image: confluentinc/cp-zookeeper:7.3.0
     container_name: delivery_zookeeper
+    restart: unless-stopped
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 256M
 
-  # 4. Kafka (Message Broker)
   kafka:
     image: confluentinc/cp-kafka:7.3.0
     container_name: delivery_kafka
@@ -51,12 +76,15 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
-  # ==========================================
-  # SPRING BOOT MICROSERVICES
-  # ==========================================
+  # ==================== MICROSERVICES ====================
 
-  # 5. Eureka Service Registry
   eureka-server:
     build:
       context: ./delivery-backend
@@ -64,8 +92,16 @@ services:
     container_name: delivery_eureka
     ports:
       - "8761:8761"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.4'
+          memory: 384M
+        reservations:
+          cpus: '0.2'
+          memory: 256M
 
-  # 6. API Gateway
   api-gateway:
     build:
       context: ./delivery-backend
@@ -77,8 +113,13 @@ services:
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
     depends_on:
       - eureka-server
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
-  # 7. User Service
   user-service:
     build:
       context: ./delivery-backend
@@ -90,19 +131,22 @@ services:
       - .env
     environment:
       - DB_HOST=mysql
-      - DB_PORT=3306  # Internally
-      - DB_USER=delivery_user
-      - DB_PASSWORD=delivery_password
       - REDIS_HOST=redis
-      - REDIS_PORT=6379
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
     depends_on:
-      - mysql
-      - redis
-      - eureka-server
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
     restart: on-failure
+    deploy:
+      resources:
+        limits:
+          cpus: '0.6'
+          memory: 768M
 
-  # 8. Order Service
   order-service:
     build:
       context: ./delivery-backend
@@ -114,19 +158,23 @@ services:
       - .env
     environment:
       - DB_HOST=mysql
-      - DB_PORT=3306
-      - DB_USER=delivery_user
-      - DB_PASSWORD=delivery_password
       - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
     depends_on:
-      - mysql
-      - eureka-server
+      mysql:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+      kafka:
+        condition: service_started
     restart: on-failure
+    deploy:
+      resources:
+        limits:
+          cpus: '0.6'
+          memory: 768M
 
-# 9. Delivery Dispatch Service
   delivery-service:
     build:
       context: ./delivery-backend
@@ -138,13 +186,21 @@ services:
       - .env
     environment:
       - REDIS_HOST=redis
-      - REDIS_PORT=6379
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka/
     depends_on:
-      - redis
-      - kafka
-      - eureka-server
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      eureka-server:
+        condition: service_started
+    restart: on-failure
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
 volumes:
   mysql_data:

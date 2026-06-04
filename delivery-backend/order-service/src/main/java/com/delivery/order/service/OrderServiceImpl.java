@@ -1,5 +1,7 @@
 package com.delivery.order.service;
 
+import com.delivery.order.client.AddressCoordinatesDto;
+import com.delivery.order.client.UserServiceClient;
 import com.delivery.order.dto.OrderRequest;
 import com.delivery.order.dto.OrderResponse;
 import com.delivery.order.dto.OrderStatusUpdateRequest;
@@ -25,15 +27,22 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final OrderTimelineRepository orderTimelineRepository;
     private final OrderEventProducer orderEventProducer;
+    private final UserServiceClient userServiceClient;
+    private final DistanceCalculationService distanceCalculationService;
 
     @Override
     @Transactional
     public OrderResponse createOrder(OrderRequest request, String customerId) {
 
-        // 1. MOCK ENGINE: Calculate Distance (e.g., random distance between 2km and 15km)
-        // In the future, you will call a Google Maps API/Service here using the Address IDs.
-        double randomDistance = 2.0 + (Math.random() * 13.0);
-        BigDecimal distanceKm = new BigDecimal(randomDistance).setScale(1, RoundingMode.HALF_UP);
+        // 1. Fetch Real Coordinates from User Service!
+        AddressCoordinatesDto pickup = userServiceClient.getCoordinates(request.getPickupAddressId());
+        AddressCoordinatesDto delivery = userServiceClient.getCoordinates(request.getDeliveryAddressId());
+
+        // 2. Calculate the real distance using our Math engine!
+        BigDecimal distanceKm = distanceCalculationService.calculateDistanceInKm(
+                pickup.getLatitude(), pickup.getLongitude(),
+                delivery.getLatitude(), delivery.getLongitude()
+        );
 
         // 2. PRICING ENGINE: Calculate Delivery Fee
         // Base fee: 15,000 VND. Plus 5,000 VND per Km. Plus 2,000 VND per Kg.

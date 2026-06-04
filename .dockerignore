@@ -1,0 +1,12 @@
+target/
+*.log
+.git
+.gitignore
+README.md
+.mvn
+mvnw
+mvnw.cmd
+**/.mvn
+**/*.jar
+**/*.class
+node_modules
