@@ -34,18 +34,42 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public OrderResponse createOrder(OrderRequest request, String customerId) {
 
-        // 1. Fetch Real Coordinates from User Service!
-        AddressCoordinatesDto pickup = userServiceClient.getCoordinates(request.getPickupAddressId());
-        AddressCoordinatesDto delivery = userServiceClient.getCoordinates(request.getDeliveryAddressId());
+        double pickupLat, pickupLng;
+        double deliveryLat, deliveryLng;
 
-        // 2. Calculate the real distance using our Math engine!
+        // 1. Resolve Pickup Location Safely
+        if (request.getPickupAddressId() != null && !request.getPickupAddressId().isEmpty()) {
+            AddressCoordinatesDto pickupCoords = userServiceClient.getCoordinates(request.getPickupAddressId());
+            pickupLat = pickupCoords.getLatitude();
+            pickupLng = pickupCoords.getLongitude();
+        } else {
+            // Null Check to prevent 500 Internal Server Error (NullPointerException)
+            if (request.getPickupLat() == null || request.getPickupLng() == null) {
+                throw new RuntimeException("Bad Request: Pickup coordinates are required if you do not provide a pickupAddressId.");
+            }
+            pickupLat = request.getPickupLat();
+            pickupLng = request.getPickupLng();
+        }
+
+        // 2. Resolve Delivery Location Safely
+        if (request.getDeliveryAddressId() != null && !request.getDeliveryAddressId().isEmpty()) {
+            AddressCoordinatesDto deliveryCoords = userServiceClient.getCoordinates(request.getDeliveryAddressId());
+            deliveryLat = deliveryCoords.getLatitude();
+            deliveryLng = deliveryCoords.getLongitude();
+        } else {
+            if (request.getDeliveryLat() == null || request.getDeliveryLng() == null) {
+                throw new RuntimeException("Bad Request: Delivery coordinates are required if you do not provide a deliveryAddressId.");
+            }
+            deliveryLat = request.getDeliveryLat();
+            deliveryLng = request.getDeliveryLng();
+        }
+
+        // 3. Math Engine!
         BigDecimal distanceKm = distanceCalculationService.calculateDistanceInKm(
-                pickup.getLatitude(), pickup.getLongitude(),
-                delivery.getLatitude(), delivery.getLongitude()
+                pickupLat, pickupLng, deliveryLat, deliveryLng
         );
 
-        // 2. PRICING ENGINE: Calculate Delivery Fee
-        // Base fee: 15,000 VND. Plus 5,000 VND per Km. Plus 2,000 VND per Kg.
+        // 4. Pricing Engine
         BigDecimal baseFee = new BigDecimal("15000");
         BigDecimal distanceFee = distanceKm.multiply(new BigDecimal("5000"));
         BigDecimal weightFee = request.getItemWeight().multiply(new BigDecimal("2000"));
@@ -54,11 +78,17 @@ public class OrderServiceImpl implements OrderService {
         BigDecimal cod = request.getCodAmount() != null ? request.getCodAmount() : BigDecimal.ZERO;
         BigDecimal total = deliveryFee.add(cod);
 
-        // 3. Create the Order
+        // 5. Create the Order (NOW SAVING THE RAW COORDINATES!)
         Order newOrder = Order.builder()
                 .customerId(customerId)
                 .pickupAddressId(request.getPickupAddressId())
+                .pickupLat(pickupLat)   // <-- SAVED
+                .pickupLng(pickupLng)   // <-- SAVED
+                .pickupAddressLine(request.getPickupAddressLine())
                 .deliveryAddressId(request.getDeliveryAddressId())
+                .deliveryLat(deliveryLat) // <-- SAVED
+                .deliveryLng(deliveryLng) // <-- SAVED
+                .deliveryAddressLine(request.getDeliveryAddressLine())
                 .itemName(request.getItemName())
                 .itemWeight(request.getItemWeight())
                 .note(request.getNote())
@@ -71,7 +101,7 @@ public class OrderServiceImpl implements OrderService {
 
         Order savedOrder = orderRepository.save(newOrder);
 
-        // 4. Create the initial Timeline Log
+        // 6. Timeline
         OrderTimeline initialTimeline = OrderTimeline.builder()
                 .order(savedOrder)
                 .status(OrderStatus.CREATED)
@@ -79,6 +109,7 @@ public class OrderServiceImpl implements OrderService {
                 .build();
         orderTimelineRepository.save(initialTimeline);
 
+        // 7. Fire Kafka Event
         OrderCreatedEvent event = OrderCreatedEvent.builder()
                 .orderId(savedOrder.getId())
                 .pickupAddressId(savedOrder.getPickupAddressId())

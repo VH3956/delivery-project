@@ -10,12 +10,20 @@ import java.math.BigDecimal;
 @Data
 public class OrderRequest {
 
-    @NotBlank(message = "Pickup address is required")
+    // Option A: Saved addresses
     private String pickupAddressId;
-
-    @NotBlank(message = "Delivery address is required")
     private String deliveryAddressId;
 
+    // Option B: One-time addresses from map pin
+    private String pickupAddressLine;
+    private Double pickupLat;
+    private Double pickupLng;
+
+    private String deliveryAddressLine;
+    private Double deliveryLat;
+    private Double deliveryLng;
+
+    // Item details
     @NotBlank(message = "Item name is required")
     private String itemName;
 
@@ -23,7 +31,7 @@ public class OrderRequest {
     @DecimalMin(value = "0.1", message = "Weight must be at least 0.1 kg")
     private BigDecimal itemWeight;
 
-    private String note; // Optional
+    private String note;
 
-    private BigDecimal codAmount; // Optional Cash on Delivery
+    private BigDecimal codAmount;
 }

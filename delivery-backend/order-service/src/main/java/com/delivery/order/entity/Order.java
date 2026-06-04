@@ -29,11 +29,31 @@ public class Order {
     @Column(name = "shipper_id")
     private String shipperId; // Nullable when newly created
 
-    @Column(name = "pickup_address_id", nullable = false)
+    @Column(name = "pickup_address_id")
     private String pickupAddressId;
 
-    @Column(name = "delivery_address_id", nullable = false)
+    @Column(name = "delivery_address_id")
     private String deliveryAddressId;
+
+    // Pickup coordinates + label
+    @Column(name = "pickup_lat")
+    private Double pickupLat;
+
+    @Column(name = "pickup_lng")
+    private Double pickupLng;
+
+    @Column(name = "pickup_address_line")
+    private String pickupAddressLine;
+
+    // Delivery coordinates + label
+    @Column(name = "delivery_lat")
+    private Double deliveryLat;
+
+    @Column(name = "delivery_lng")
+    private Double deliveryLng;
+
+    @Column(name = "delivery_address_line")
+    private String deliveryAddressLine;
 
     @Column(name = "voucher_id")
     private String voucherId; // Nullable
