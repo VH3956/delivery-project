@@ -136,11 +136,19 @@ public class OrderServiceImpl implements OrderService {
 
         // 7. Fire Kafka Event
         OrderCreatedEvent event = OrderCreatedEvent.builder()
-                .orderId(savedOrder.getId())
-                .pickupAddressId(savedOrder.getPickupAddressId())
-                .deliveryAddressId(savedOrder.getDeliveryAddressId())
-                .deliveryFee(savedOrder.getDeliveryFee())
-                .build();
+            .orderId(savedOrder.getId())
+
+            .pickupAddressId(savedOrder.getPickupAddressId())
+            .deliveryAddressId(savedOrder.getDeliveryAddressId())
+
+            .pickupLat(savedOrder.getPickupLat())
+            .pickupLng(savedOrder.getPickupLng())
+
+            .deliveryLat(savedOrder.getDeliveryLat())
+            .deliveryLng(savedOrder.getDeliveryLng())
+
+            .deliveryFee(savedOrder.getDeliveryFee())
+            .build();
 
         orderEventProducer.publishOrderCreatedEvent(event);
 

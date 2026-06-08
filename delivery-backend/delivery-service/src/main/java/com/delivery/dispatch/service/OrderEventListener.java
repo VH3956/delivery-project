@@ -25,9 +25,35 @@ public class OrderEventListener {
         log.info("Order ID: {}", event.getOrderId());
 
         // 1. Get the GPS Coordinates for the Pickup Address
-        double[] coords = addressResolverService.getCoordinates(event.getPickupAddressId());
-        double longitude = coords[0];
-        double latitude = coords[1];
+        double longitude;
+        double latitude;
+
+        if (event.getPickupLat() != null && event.getPickupLng() != null) {
+
+            // Case 1: Map pin / direct coordinates
+            longitude = event.getPickupLng();
+            latitude = event.getPickupLat();
+
+            log.info("📍 Using coordinates directly from Order Event");
+
+        } else if (event.getPickupAddressId() != null &&
+                !event.getPickupAddressId().isBlank()) {
+
+            // Case 2: Saved address -> resolve via User Service
+            log.info("📍 Resolving coordinates using Address ID: {}",
+                    event.getPickupAddressId());
+
+            double[] coords = addressResolverService.getCoordinates(
+                    event.getPickupAddressId());
+
+            longitude = coords[0];
+            latitude = coords[1];
+
+        } else {
+            // Case 3: Invalid event (neither coordinates nor address ID)
+            throw new IllegalStateException(
+                    "Order event contains neither coordinates nor address ID for pickup location");
+        }
 
         log.info("📍 Pickup Coordinates: [{}, {}]", longitude, latitude);
 

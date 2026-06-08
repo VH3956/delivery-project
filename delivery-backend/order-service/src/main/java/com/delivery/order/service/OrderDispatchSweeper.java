@@ -34,14 +34,23 @@ public class OrderDispatchSweeper {
 
         // 2. Loop through them and throw them back into Kafka
         for (Order order : pendingOrders) {
-
+            
             OrderCreatedEvent event = OrderCreatedEvent.builder()
                     .orderId(order.getId())
+                    
+                    // Saved Address Flow
                     .pickupAddressId(order.getPickupAddressId())
                     .deliveryAddressId(order.getDeliveryAddressId())
+                    
+                    // Map Pin Flow (Add these!)
+                    .pickupLat(order.getPickupLat())
+                    .pickupLng(order.getPickupLng())
+                    .deliveryLat(order.getDeliveryLat())
+                    .deliveryLng(order.getDeliveryLng())
+                    
                     .deliveryFee(order.getDeliveryFee())
                     .build();
-
+                    
             log.info("🔄 Re-queueing Order ID: {}", order.getId());
             orderEventProducer.publishOrderCreatedEvent(event);
         }
