@@ -2,6 +2,7 @@ package com.delivery.order.enums;
 
 public enum OrderStatus {
     CREATED,      // Order just created by Customer
+    PAID,        // Customer completed payment
     ASSIGNED,     // System found a Shipper
     PICKED_UP,    // Shipper got the package
     IN_TRANSIT,   // Package is on the way

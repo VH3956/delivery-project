@@ -33,5 +33,11 @@ public class OrderRequest {
 
     private String note;
 
+    // Financials
     private BigDecimal codAmount;
+
+    private String voucherCode;
+
+    // "COD" or "VNPAY"
+    private String paymentMethod;
 }

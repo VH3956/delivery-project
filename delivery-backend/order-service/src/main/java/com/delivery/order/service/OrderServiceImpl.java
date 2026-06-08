@@ -7,10 +7,12 @@ import com.delivery.order.dto.OrderResponse;
 import com.delivery.order.dto.OrderStatusUpdateRequest;
 import com.delivery.order.entity.Order;
 import com.delivery.order.entity.OrderTimeline;
+import com.delivery.order.entity.Voucher;
 import com.delivery.order.enums.OrderStatus;
 import com.delivery.order.event.OrderCreatedEvent;
 import com.delivery.order.repository.OrderRepository;
 import com.delivery.order.repository.OrderTimelineRepository;
+import com.delivery.order.repository.VoucherRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +31,8 @@ public class OrderServiceImpl implements OrderService {
     private final OrderEventProducer orderEventProducer;
     private final UserServiceClient userServiceClient;
     private final DistanceCalculationService distanceCalculationService;
+    private final VoucherRepository voucherRepository;
+    private final VNPayService vnPayService;
 
     @Override
     @Transactional
@@ -75,13 +79,33 @@ public class OrderServiceImpl implements OrderService {
         BigDecimal weightFee = request.getItemWeight().multiply(new BigDecimal("2000"));
         BigDecimal deliveryFee = baseFee.add(distanceFee).add(weightFee).setScale(0, RoundingMode.HALF_UP);
 
-        BigDecimal cod = request.getCodAmount() != null ? request.getCodAmount() : BigDecimal.ZERO;
-        BigDecimal total = deliveryFee.add(cod);
+        // --- NEW VOUCHER LOGIC ---
+        BigDecimal discount = BigDecimal.ZERO;
+        String appliedVoucherId = null;
 
-        // 5. Create the Order (NOW SAVING THE RAW COORDINATES!)
+        if (request.getVoucherCode() != null && !request.getVoucherCode().trim().isEmpty()) {
+            Voucher voucher = voucherRepository.findByCodeAndIsActiveTrue(request.getVoucherCode().toUpperCase())
+                    .orElseThrow(() -> new RuntimeException("Invalid or expired voucher code."));
+
+            if (deliveryFee.compareTo(voucher.getMinOrderValue()) < 0) {
+                throw new RuntimeException("Delivery fee does not meet the minimum requirement for this voucher.");
+            }
+
+            discount = voucher.getDiscountAmount();
+            appliedVoucherId = voucher.getId();
+        }
+        // -------------------------
+
+        BigDecimal cod = request.getCodAmount() != null ? request.getCodAmount() : BigDecimal.ZERO;
+
+        // Final Total = (Delivery Fee - Discount) + COD. Ensure it doesn't drop below 0!
+        BigDecimal finalDeliveryFee = deliveryFee.subtract(discount).max(BigDecimal.ZERO);
+        BigDecimal total = finalDeliveryFee.add(cod);
+
+        // 5. Create the Order
         Order newOrder = Order.builder()
                 .customerId(customerId)
-                .pickupAddressId(request.getPickupAddressId())
+               .pickupAddressId(request.getPickupAddressId())
                 .pickupLat(pickupLat)   // <-- SAVED
                 .pickupLng(pickupLng)   // <-- SAVED
                 .pickupAddressLine(request.getPickupAddressLine())
@@ -93,9 +117,10 @@ public class OrderServiceImpl implements OrderService {
                 .itemWeight(request.getItemWeight())
                 .note(request.getNote())
                 .distanceKm(distanceKm)
-                .deliveryFee(deliveryFee)
+                .deliveryFee(deliveryFee) // Save the original fee
+                .voucherId(appliedVoucherId) // <-- SAVE THE VOUCHER ID
                 .codAmount(cod)
-                .totalAmount(total)
+                .totalAmount(total)       // Save the discounted total
                 .status(OrderStatus.CREATED)
                 .build();
 
@@ -119,7 +144,24 @@ public class OrderServiceImpl implements OrderService {
 
         orderEventProducer.publishOrderCreatedEvent(event);
 
-        return mapToResponse(savedOrder);
+        OrderResponse response = mapToResponse(savedOrder);
+
+        // Populate voucher details in the response
+        if (appliedVoucherId != null) {
+            response.setVoucherCode(request.getVoucherCode().toUpperCase());
+            response.setDiscountAmount(discount);
+            response.setFinalDeliveryFee(finalDeliveryFee);
+        }
+
+        // --- NEW VNPAY LOGIC ---
+        // If the user requested VNPay, generate the secure URL and attach it to the response!
+        if ("VNPAY".equalsIgnoreCase(request.getPaymentMethod())) {
+            String paymentUrl = vnPayService.createPaymentUrl(savedOrder);
+            response.setPaymentUrl(paymentUrl);
+        }
+        // -----------------------
+
+        return response;
     }
 
     @Override
