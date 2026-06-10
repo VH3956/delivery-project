@@ -22,6 +22,11 @@ public class AuthService {
         User user = userRepository.findByPhone(request.getPhone())
                 .orElseThrow(() -> new RuntimeException("User not found with this phone number"));
 
+        // Check if user verified
+        if (!user.isVerified()) {
+            throw new RuntimeException("Account not verified. Please check your email for the verification code.");
+        }
+
         // 2. Verify password (BCrypt compares the raw password with the hashed one in DB)
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             throw new RuntimeException("Invalid password");

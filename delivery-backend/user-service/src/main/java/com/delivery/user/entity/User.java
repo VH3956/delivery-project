@@ -50,6 +50,10 @@ public class User {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "is_verified", nullable = false)
+    @Builder.Default
+    private boolean isVerified = false;
+
     // Enum in class
     public enum Role {
         ADMIN, CUSTOMER, SHIPPER

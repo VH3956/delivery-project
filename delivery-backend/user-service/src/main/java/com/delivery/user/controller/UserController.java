@@ -8,6 +8,7 @@ import com.delivery.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.util.Map;
 
 import java.security.Principal;
 
@@ -27,6 +28,23 @@ public class UserController {
     public ResponseEntity<UserResponse> createUser(@RequestBody UserCreationRequest request) {
         UserResponse response = userService.createUser(request);
         return ResponseEntity.ok(response);
+    }
+
+    // API: Verify OTP (POST http://localhost:8081/api/users/verify)
+    @PostMapping("/verify")
+    public ResponseEntity<Map<String, String>> verifyEmail(@RequestBody VerifyOtpRequest request) {
+        String message = userService.verifyOtp(request.getEmail(), request.getOtpCode());
+
+        // Return as JSON: { "message": "Email verified successfully! You can now log in." }
+        return ResponseEntity.ok(Map.of("message", message));
+    }
+
+    // API: Resend OTP (POST http://localhost:8081/api/users/resend-otp)
+    @PostMapping("/resend-otp")
+    public ResponseEntity<Map<String, String>> resendOtp(@RequestBody ResendOtpRequest request) {
+        userService.resendOtp(request.getEmail());
+        
+        return ResponseEntity.ok(Map.of("message", "A fresh verification code has been sent to your email."));
     }
 
     // Get my profile

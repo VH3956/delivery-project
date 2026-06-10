@@ -33,6 +33,7 @@ public class DatabaseSeeder implements CommandLineRunner {
                     .fullName("System Admin")
                     .role(User.Role.ADMIN)
                     .isActive(true)
+                    .isVerified(true) // Admin is already verified
                     .build();
             userRepository.save(admin);
 
@@ -44,6 +45,7 @@ public class DatabaseSeeder implements CommandLineRunner {
                     .fullName("Regular Customer")
                     .role(User.Role.CUSTOMER)
                     .isActive(true)
+                    .isVerified(true)
                     .build();
             userRepository.save(customer);
 
@@ -55,6 +57,7 @@ public class DatabaseSeeder implements CommandLineRunner {
                     .fullName("Fast Shipper")
                     .role(User.Role.SHIPPER)
                     .isActive(true)
+                    .isVerified(true)
                     .build();
             userRepository.save(shipperUser);
 
