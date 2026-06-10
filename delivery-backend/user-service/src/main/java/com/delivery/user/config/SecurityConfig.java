@@ -1,9 +1,11 @@
 package com.delivery.user.config;
 
+import com.delivery.user.security.JwtAuthenticationEntryPoint;
 import com.delivery.user.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -15,10 +17,12 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
     // Define BCrypt as the password encoder bean
     @Bean
@@ -33,6 +37,7 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 // Make session stateless since we use JWT
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(exception -> exception.authenticationEntryPoint(jwtAuthenticationEntryPoint))
                 .authorizeHttpRequests(auth -> auth
                         // Public endpoints
                         .requestMatchers(
@@ -44,7 +49,8 @@ public class SecurityConfig {
                                 "/v3/api-docs",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
-                                "/swagger-ui.html"
+                                "/swagger-ui.html",
+                                "/api/test/**"
                         ).permitAll()
 
                         // Logout requires authentication
@@ -52,14 +58,6 @@ public class SecurityConfig {
 
                         // Allow INTERNAL microservice communication without tokens!
                         .requestMatchers("/api/internal/**").permitAll()
-
-                        // Protected user endpoints
-                        .requestMatchers("/api/users/me/**").authenticated()
-                        .requestMatchers("/api/shippers/me/**").authenticated()
-
-                        // Only admin can access admin endpoint
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
-
                         // Everything else requires authentication
                         .anyRequest().authenticated()
                 )

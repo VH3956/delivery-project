@@ -5,6 +5,7 @@ import com.delivery.user.dto.ShipperRegistrationRequest;
 import com.delivery.user.service.ShipperService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
@@ -12,6 +13,7 @@ import java.security.Principal;
 @RestController
 @RequestMapping("/api/shippers")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('SHIPPER')")
 public class ShipperController {
 
     private final ShipperService shipperService;

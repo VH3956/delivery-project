@@ -3,9 +3,11 @@ package com.delivery.user.controller;
 import com.delivery.user.dto.LoginRequest;
 import com.delivery.user.dto.RefreshTokenRequest;
 import com.delivery.user.dto.TokenResponse;
+import com.delivery.user.model.ApiResponse;
+import com.delivery.user.security.JwtTokenHelper;
 import com.delivery.user.service.AuthService;
-import com.delivery.user.service.JwtService;
 import com.delivery.user.service.TokenBlacklistService;
+import com.delivery.user.util.ResponseUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,34 +18,32 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
-    private final JwtService jwtService;
+    private final JwtTokenHelper jwtTokenHelper; // Replaces JwtService
     private final TokenBlacklistService tokenBlacklistService;
 
-    // API: Login (POST http://localhost:8081/api/auth/login)
     @PostMapping("/login")
-    public ResponseEntity<TokenResponse> login(@RequestBody LoginRequest request) {
+    public ResponseEntity<ApiResponse<TokenResponse>> login(@RequestBody LoginRequest request) {
         TokenResponse response = authService.login(request);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ResponseUtils.success(response)); // Wrapped in Phase 1 format!
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<TokenResponse> refreshToken(@RequestBody RefreshTokenRequest request) {
-        return ResponseEntity.ok(authService.refreshToken(request));
+    public ResponseEntity<ApiResponse<TokenResponse>> refreshToken(@RequestBody RefreshTokenRequest request) {
+        return ResponseEntity.ok(ResponseUtils.success(authService.refreshToken(request)));
     }
 
-    // API: Logout (POST /api/auth/logout)
     @PostMapping("/logout")
-    public ResponseEntity<String> logout(jakarta.servlet.http.HttpServletRequest request) {
+    public ResponseEntity<ApiResponse<Void>> logout(jakarta.servlet.http.HttpServletRequest request) {
         String authHeader = request.getHeader("Authorization");
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
 
-            // Extract expiration and blacklist the token
-            java.util.Date expiration = jwtService.extractExpiration(token);
+            // Use the new helper to get expiration
+            java.util.Date expiration = jwtTokenHelper.extractExpiration(token);
             tokenBlacklistService.addToBlacklist(token, expiration.getTime());
         }
 
-        return ResponseEntity.ok("Logged out successfully");
+        return ResponseEntity.ok(ResponseUtils.success("Logged out successfully"));
     }
 }

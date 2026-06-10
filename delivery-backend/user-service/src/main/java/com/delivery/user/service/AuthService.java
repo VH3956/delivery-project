@@ -1,76 +1,90 @@
 package com.delivery.user.service;
 
+import com.delivery.user.constant.ErrorCode;
 import com.delivery.user.dto.LoginRequest;
 import com.delivery.user.dto.RefreshTokenRequest;
 import com.delivery.user.dto.TokenResponse;
 import com.delivery.user.entity.User;
+import com.delivery.user.exception.BusinessException;
 import com.delivery.user.repository.UserRepository;
+import com.delivery.user.repository.UserRoleRepository;
+import com.delivery.user.security.JwtTokenHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final UserRoleRepository userRoleRepository; // Inject the new role repository!
     private final PasswordEncoder passwordEncoder;
-    private final JwtService jwtService;
+    private final JwtTokenHelper jwtTokenHelper; // Replaces JwtService
 
     public TokenResponse login(LoginRequest request) {
-        // 1. Find user by phone
+        // 1. Find user by phone (Throws our new BusinessException!)
         User user = userRepository.findByPhone(request.getPhone())
-                .orElseThrow(() -> new RuntimeException("User not found with this phone number"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        // Check if user verified
+        // 2. Check if user verified
         if (!user.isVerified()) {
-            throw new RuntimeException("Account not verified. Please check your email for the verification code.");
+            throw new BusinessException(ErrorCode.INVALID_OTP); 
         }
 
-        // 2. Verify password (BCrypt compares the raw password with the hashed one in DB)
+        // 3. Verify password
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new RuntimeException("Invalid password");
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
 
-        // 3. Generate tokens
-        String accessToken = jwtService.generateAccessToken(user);
-        String refreshToken = jwtService.generateRefreshToken(user);
+        // 4. Fetch roles from the database mapping table
+        List<String> roles = userRoleRepository.findByUserId(user.getId())
+                .stream()
+                .map(userRole -> userRole.getRole().getName())
+                .collect(Collectors.toList());
 
-        // 4. Return response
+        // 5. Generate tokens using the new helper
+        String accessToken = jwtTokenHelper.generateAccessToken(user, roles);
+        String refreshToken = jwtTokenHelper.generateRefreshToken(user);
+
+        // 6. Return response
         return TokenResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .userId(user.getId())
-                .role(user.getRole().name())
+                .role(roles.isEmpty() ? "USER" : roles.get(0)) // Default fallback
                 .build();
     }
 
-    // Method to generate new tokens from a valid refresh token
     public TokenResponse refreshToken(RefreshTokenRequest request) {
-        String reqToken = request.getRefreshToken();
-
-        // 1. Validate the refresh token (Check signature and expiration)
-        if (!jwtService.isTokenValid(reqToken)) {
-            throw new RuntimeException("Invalid or expired refresh token. Please login again.");
+        String token = request.getRefreshToken();
+        
+        if (!jwtTokenHelper.isTokenValid(token)) {
+            throw new RuntimeException("Invalid refresh token"); 
         }
 
-        // 2. Extract the phone number from the token
-        String phone = jwtService.extractPhone(reqToken);
-
-        // 3. Find the user in the database
+        // The subject of our refresh token is the phone number
+        String phone = jwtTokenHelper.extractClaim(token, claims -> claims.getSubject());
+        
         User user = userRepository.findByPhone(phone)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        // 4. Generate a brand new pair of tokens
-        String newAccessToken = jwtService.generateAccessToken(user);
-        String newRefreshToken = jwtService.generateRefreshToken(user);
+        List<String> roles = userRoleRepository.findByUserId(user.getId())
+                .stream()
+                .map(userRole -> userRole.getRole().getName())
+                .collect(Collectors.toList());
 
-        // 5. Return the new tokens
+        String newAccessToken = jwtTokenHelper.generateAccessToken(user, roles);
+        String newRefreshToken = jwtTokenHelper.generateRefreshToken(user);
+
         return TokenResponse.builder()
                 .accessToken(newAccessToken)
                 .refreshToken(newRefreshToken)
                 .userId(user.getId())
-                .role(user.getRole().name())
+                .role(roles.isEmpty() ? "USER" : roles.get(0))
                 .build();
     }
 }

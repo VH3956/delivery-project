@@ -30,13 +30,14 @@ spring:
           starttls:
             enable: true
 
-jwt:
-  # NO default value for the secret. This forces the app to fail if the secret is missing (Safe practice)
-  secret: ${JWT_SECRET}
-  # Default to 1 hour
-  access-expiration: ${JWT_ACCESS_EXPIRATION:3600000}
-  # Default to 7 days
-  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+app:
+  jwt:
+    # NO default value for the secret. This forces the app to fail if the secret is missing (Safe practice)
+    secret: ${JWT_SECRET}
+    # Default to 1 hour
+    access-expiration: ${JWT_ACCESS_EXPIRATION:3600000}
+    # Default to 7 days
+    refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
 
 
 eureka:

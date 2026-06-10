@@ -4,9 +4,15 @@ import com.delivery.user.dto.ShipperProfileResponse;
 import com.delivery.user.dto.ShipperRegistrationRequest;
 import com.delivery.user.entity.ShipperProfile;
 import com.delivery.user.entity.User;
+import com.delivery.user.entity.UserRole;
 import com.delivery.user.repository.ShipperProfileRepository;
 import com.delivery.user.repository.UserRepository;
+import com.delivery.user.repository.UserRoleRepository;
+
 import lombok.RequiredArgsConstructor;
+
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,15 +22,17 @@ public class ShipperService {
 
     private final ShipperProfileRepository shipperProfileRepository;
     private final UserRepository userRepository;
+    private final UserRoleRepository userRoleRepository;
 
     @Transactional
     public ShipperProfileResponse registerShipperProfile(String userId, ShipperRegistrationRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Verify the user actually registered as a SHIPPER role
-        if (user.getRole() != User.Role.SHIPPER) {
-            throw new RuntimeException("Only users with SHIPPER role can register a shipper profile");
+        List<UserRole> roles = userRoleRepository.findByUserId(userId);
+        boolean isShipper = roles.stream().anyMatch(ur -> ur.getRole().getName().equals("ROLE_SHIPPER"));
+        if (!isShipper) {
+            throw new RuntimeException("User does not hold shipper permissions.");
         }
 
         if (shipperProfileRepository.findByUserId(userId).isPresent()) {

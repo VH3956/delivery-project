@@ -35,10 +35,6 @@ public class User {
     @Column(name = "avatar_url")
     private String avatarUrl;
 
-    @Enumerated(EnumType.STRING)
-    @Column(length = 20)
-    private Role role; // enum CUSTOMER, SHIPPER, ADMIN
-
     @Column(name = "is_active", nullable = false)
     private boolean isActive = true;
 

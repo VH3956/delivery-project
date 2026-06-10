@@ -1,17 +1,25 @@
 package com.delivery.user.service;
 
+import com.delivery.user.constant.ErrorCode;
 import com.delivery.user.dto.ChangePasswordRequest;
 import com.delivery.user.dto.UpdateProfileRequest;
 import com.delivery.user.dto.UserCreationRequest;
 import com.delivery.user.dto.UserResponse;
 import com.delivery.user.entity.User;
+import com.delivery.user.entity.UserRole;
+import com.delivery.user.exception.BusinessException;
+import com.delivery.user.entity.Role;
+import com.delivery.user.repository.RoleRepository;
 import com.delivery.user.repository.UserRepository;
+import com.delivery.user.repository.UserRoleRepository;
+
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import java.util.concurrent.TimeUnit;
+import java.util.List;
 import java.util.Random;
 
 @Service
@@ -19,9 +27,18 @@ import java.util.Random;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final UserRoleRepository userRoleRepository;
     private final PasswordEncoder passwordEncoder; // Inject the encoder
     private final EmailService emailService;
     private final StringRedisTemplate redisTemplate;
+
+    // Helper method to extract the primary role name for DTOs
+    private String getPrimaryRoleName(String userId) {
+        List<UserRole> userRoles = userRoleRepository.findByUserId(userId);
+        if (userRoles.isEmpty()) return "CUSTOMER";
+        return userRoles.get(0).getRole().getName().replace("ROLE_", ""); // Strip prefix for frontend
+    }
 
     public UserResponse createUser(UserCreationRequest request) {
         // 1. Check if phone/email already exists
@@ -33,13 +50,15 @@ public class UserService {
             throw new RuntimeException("Email is already in use!");
         }
 
-        // Parse the requested role
-        User.Role requestedRole = User.Role.valueOf(request.getRole().toUpperCase());
-
         // SECURITY FIX: Block anyone from registering as an ADMIN via the public API
-        if (requestedRole == User.Role.ADMIN) {
+        String requestedRole = "ROLE_" + request.getRole().toUpperCase();
+        if (requestedRole.equals("ROLE_ADMIN")) {
             throw new RuntimeException("Unauthorized: Cannot register as ADMIN via public API");
         }
+
+        // Fetch the role from the database instead of the Enum
+        Role role = roleRepository.findByName(requestedRole)
+                .orElseThrow(() -> new RuntimeException("Role " + requestedRole + " not found in database."));
 
         // 2. Map DTO to Entity and hash the password
         User newUser = User.builder()
@@ -48,13 +67,15 @@ public class UserService {
                 // Hash the password before saving
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .fullName(request.getFullName())
-                .role(requestedRole)
                 .isActive(true)
                 .isVerified(false)
                 .build();
 
         // 3. Save to database
         User savedUser = userRepository.save(newUser);
+
+        // Save mapping to UserRole table
+        userRoleRepository.save(UserRole.builder().user(savedUser).role(role).build());
 
         // 4. Generate 6-Digit OTP
         String otpCode = String.format("%06d", new Random().nextInt(999999));
@@ -72,7 +93,7 @@ public class UserService {
                 .phone(savedUser.getPhone())
                 .email(savedUser.getEmail())
                 .fullName(savedUser.getFullName())
-                .role(savedUser.getRole().name())
+                .role(getPrimaryRoleName(savedUser.getId()))
                 .createdAt(savedUser.getCreatedAt())
                 .build();
     }
@@ -84,17 +105,17 @@ public class UserService {
 
         // 1. Check if OTP exists or expired
         if (savedOtp == null) {
-            throw new RuntimeException("OTP has expired or does not exist. Please register again or request a new code.");
+            throw new BusinessException(ErrorCode.INVALID_OTP);
         }
 
         // 2. Check if OTP matches
         if (!savedOtp.equals(otpCode)) {
-            throw new RuntimeException("Invalid verification code!");
+            throw new BusinessException(ErrorCode.INVALID_OTP);
         }
 
         // 3. OTP is correct! Unlock the user account
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         user.setVerified(true);
 
@@ -108,7 +129,7 @@ public class UserService {
     public void resendOtp(String email) {
         // 1. Verify the user exists and actually needs an OTP
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found with this email."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         if (user.isVerified()) {
             throw new RuntimeException("This account is already verified. You can log in directly.");
@@ -127,7 +148,7 @@ public class UserService {
     // 1. Get My Profile
     public UserResponse getMyProfile(String userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         return UserResponse.builder()
                 .id(user.getId())
@@ -135,7 +156,7 @@ public class UserService {
                 .email(user.getEmail())
                 .fullName(user.getFullName())
                 .avatarUrl(user.getAvatarUrl())
-                .role(user.getRole().name())
+                .role(getPrimaryRoleName(user.getId()))
                 .createdAt(user.getCreatedAt())
                 .build();
     }
@@ -143,7 +164,7 @@ public class UserService {
     // 2. Update Profile
     public UserResponse updateProfile(String userId, UpdateProfileRequest request) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         // Update fields if they are provided
         if (request.getFullName() != null) user.setFullName(request.getFullName());
@@ -157,13 +178,12 @@ public class UserService {
     // 3. Change Password
     public void changePassword(String userId, ChangePasswordRequest request) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         // Verify old password
         if (!passwordEncoder.matches(request.getOldPassword(), user.getPasswordHash())) {
-            throw new RuntimeException("Invalid old password");
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
-
         // Save new hashed password
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
@@ -172,7 +192,7 @@ public class UserService {
     // Admin: Lock or Unlock a user account
     public UserResponse toggleUserStatus(String userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         user.setActive(!user.isActive());
         User savedUser = userRepository.save(user);
@@ -182,7 +202,7 @@ public class UserService {
                 .phone(savedUser.getPhone())
                 .email(savedUser.getEmail())
                 .fullName(savedUser.getFullName())
-                .role(savedUser.getRole().name())
+                .role(getPrimaryRoleName(savedUser.getId()))
                 .createdAt(savedUser.getCreatedAt())
                 .build();
     }
@@ -193,25 +213,28 @@ public class UserService {
             throw new RuntimeException("Phone number is already in use!");
         }
 
-        User.Role requestedRole = User.Role.valueOf(request.getRole().toUpperCase());
+        String requestedRole = "ROLE_" + request.getRole().toUpperCase();
+        Role role = roleRepository.findByName(requestedRole)
+                .orElseThrow(() -> new RuntimeException("Role " + requestedRole + " not found in database."));
 
         User newUser = User.builder()
                 .phone(request.getPhone())
                 .email(request.getEmail())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .fullName(request.getFullName())
-                .role(requestedRole) // Allows ADMIN, SHIPPER, or CUSTOMER
                 .isActive(true)
                 .build();
 
         User savedUser = userRepository.save(newUser);
+
+        userRoleRepository.save(UserRole.builder().user(savedUser).role(role).build());
 
         return UserResponse.builder()
                 .id(savedUser.getId())
                 .phone(savedUser.getPhone())
                 .email(savedUser.getEmail())
                 .fullName(savedUser.getFullName())
-                .role(savedUser.getRole().name())
+                .role(getPrimaryRoleName(savedUser.getId()))
                 .createdAt(savedUser.getCreatedAt())
                 .build();
     }

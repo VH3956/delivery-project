@@ -1,8 +1,8 @@
 package com.delivery.user.controller;
 
 import com.delivery.user.dto.*;
+import com.delivery.user.security.JwtTokenHelper;
 import com.delivery.user.service.AddressService;
-import com.delivery.user.service.JwtService;
 import com.delivery.user.service.TokenBlacklistService;
 import com.delivery.user.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +18,7 @@ import java.security.Principal;
 public class UserController {
 
     private final UserService userService;
-    private final JwtService jwtService;
+    private final JwtTokenHelper jwtTokenHelper;
     private final TokenBlacklistService tokenBlacklistService;
 
     private final AddressService addressService;
@@ -74,7 +74,7 @@ public class UserController {
         String authHeader = httpRequest.getHeader("Authorization");
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
-            java.util.Date expiration = jwtService.extractExpiration(token);
+            java.util.Date expiration = jwtTokenHelper.extractExpiration(token);
             tokenBlacklistService.addToBlacklist(token, expiration.getTime());
         }
 
