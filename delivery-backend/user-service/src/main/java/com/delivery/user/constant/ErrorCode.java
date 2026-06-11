@@ -8,6 +8,9 @@ public enum ErrorCode {
     // System Errors
     INTERNAL_SERVER_ERROR("server.error", 500),
 
+    // Business Validation Errors (Add this!)
+    ACTION_NOT_ALLOWED("action.not.allowed", 400),
+
     // Business Errors
     USER_NOT_FOUND("user.not.found", 404),
     INVALID_PASSWORD("user.invalid.password", 400),

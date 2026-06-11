@@ -2,7 +2,10 @@ package com.delivery.user.controller;
 
 import com.delivery.user.dto.ShipperProfileResponse;
 import com.delivery.user.dto.ShipperRegistrationRequest;
+import com.delivery.user.model.ApiResponse;
 import com.delivery.user.service.ShipperService;
+import com.delivery.user.util.ResponseUtils;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -20,21 +23,21 @@ public class ShipperController {
 
     // Submit documents to become a shipper
     @PostMapping("/me/profile")
-    public ResponseEntity<ShipperProfileResponse> registerProfile(
+    public ResponseEntity<ApiResponse<ShipperProfileResponse>> registerProfile(
             Principal principal,
             @RequestBody ShipperRegistrationRequest request) {
-        return ResponseEntity.ok(shipperService.registerShipperProfile(principal.getName(), request));
+        return ResponseEntity.ok(ResponseUtils.success(shipperService.registerShipperProfile(principal.getName(), request)));
     }
 
     // View my shipper profile and approval status
     @GetMapping("/me/profile")
-    public ResponseEntity<ShipperProfileResponse> getMyProfile(Principal principal) {
-        return ResponseEntity.ok(shipperService.getMyShipperProfile(principal.getName()));
+    public ResponseEntity<ApiResponse<ShipperProfileResponse>> getMyProfile(Principal principal) {
+        return ResponseEntity.ok(ResponseUtils.success(shipperService.getMyShipperProfile(principal.getName())));
     }
 
     // Toggle Online/Offline (SHIP-03)
     @PatchMapping("/me/status")
-    public ResponseEntity<ShipperProfileResponse> toggleStatus(Principal principal) {
-        return ResponseEntity.ok(shipperService.toggleOnlineStatus(principal.getName()));
+    public ResponseEntity<ApiResponse<ShipperProfileResponse>> toggleStatus(Principal principal) {
+        return ResponseEntity.ok(ResponseUtils.success(shipperService.toggleOnlineStatus(principal.getName())));
     }
 }
