@@ -20,7 +20,7 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-    # Mail Configuration (Google SMTP)
+  # Mail Configuration (Google SMTP)
   mail:
     host: ${EMAIL_HOST}
     port: ${EMAIL_PORT}

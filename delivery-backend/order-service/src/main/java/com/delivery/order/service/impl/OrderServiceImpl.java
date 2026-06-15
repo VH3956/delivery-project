@@ -1,7 +1,8 @@
-package com.delivery.order.service;
+package com.delivery.order.service.impl;
 
 import com.delivery.order.client.AddressCoordinatesDto;
 import com.delivery.order.client.UserServiceClient;
+import com.delivery.order.constant.ErrorCode;
 import com.delivery.order.dto.OrderRequest;
 import com.delivery.order.dto.OrderResponse;
 import com.delivery.order.dto.OrderStatusUpdateRequest;
@@ -10,18 +11,26 @@ import com.delivery.order.entity.OrderTimeline;
 import com.delivery.order.entity.Voucher;
 import com.delivery.order.enums.OrderStatus;
 import com.delivery.order.event.OrderCreatedEvent;
+import com.delivery.order.exception.BusinessException;
 import com.delivery.order.repository.OrderRepository;
 import com.delivery.order.repository.OrderTimelineRepository;
 import com.delivery.order.repository.VoucherRepository;
+import com.delivery.order.service.DistanceCalculationService;
+import com.delivery.order.service.OrderEventProducer;
+import com.delivery.order.service.OrderService;
+import com.delivery.order.service.VNPayService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderServiceImpl implements OrderService {
@@ -47,9 +56,8 @@ public class OrderServiceImpl implements OrderService {
             pickupLat = pickupCoords.getLatitude();
             pickupLng = pickupCoords.getLongitude();
         } else {
-            // Null Check to prevent 500 Internal Server Error (NullPointerException)
             if (request.getPickupLat() == null || request.getPickupLng() == null) {
-                throw new RuntimeException("Bad Request: Pickup coordinates are required if you do not provide a pickupAddressId.");
+                throw new BusinessException(ErrorCode.ACTION_NOT_ALLOWED, "Pickup coordinates are required.");
             }
             pickupLat = request.getPickupLat();
             pickupLng = request.getPickupLng();
@@ -62,7 +70,7 @@ public class OrderServiceImpl implements OrderService {
             deliveryLng = deliveryCoords.getLongitude();
         } else {
             if (request.getDeliveryLat() == null || request.getDeliveryLng() == null) {
-                throw new RuntimeException("Bad Request: Delivery coordinates are required if you do not provide a deliveryAddressId.");
+                throw new BusinessException(ErrorCode.ACTION_NOT_ALLOWED, "Delivery coordinates are required.");
             }
             deliveryLat = request.getDeliveryLat();
             deliveryLng = request.getDeliveryLng();
@@ -79,22 +87,21 @@ public class OrderServiceImpl implements OrderService {
         BigDecimal weightFee = request.getItemWeight().multiply(new BigDecimal("2000"));
         BigDecimal deliveryFee = baseFee.add(distanceFee).add(weightFee).setScale(0, RoundingMode.HALF_UP);
 
-        // --- NEW VOUCHER LOGIC ---
+        // Voucher Logic
         BigDecimal discount = BigDecimal.ZERO;
         String appliedVoucherId = null;
 
         if (request.getVoucherCode() != null && !request.getVoucherCode().trim().isEmpty()) {
             Voucher voucher = voucherRepository.findByCodeAndIsActiveTrue(request.getVoucherCode().toUpperCase())
-                    .orElseThrow(() -> new RuntimeException("Invalid or expired voucher code."));
+                    .orElseThrow(() -> new BusinessException(ErrorCode.VOUCHER_NOT_FOUND, "Invalid or expired voucher code."));
 
             if (deliveryFee.compareTo(voucher.getMinOrderValue()) < 0) {
-                throw new RuntimeException("Delivery fee does not meet the minimum requirement for this voucher.");
+                throw new BusinessException(ErrorCode.VOUCHER_INVALID, "Delivery fee does not meet the minimum requirement for this voucher.");
             }
 
             discount = voucher.getDiscountAmount();
             appliedVoucherId = voucher.getId();
         }
-        // -------------------------
 
         BigDecimal cod = request.getCodAmount() != null ? request.getCodAmount() : BigDecimal.ZERO;
 
@@ -102,25 +109,25 @@ public class OrderServiceImpl implements OrderService {
         BigDecimal finalDeliveryFee = deliveryFee.subtract(discount).max(BigDecimal.ZERO);
         BigDecimal total = finalDeliveryFee.add(cod);
 
-        // 5. Create the Order
+        // 5. Create the Order (Using accurate entity fields)
         Order newOrder = Order.builder()
-                .customerId(customerId)
-               .pickupAddressId(request.getPickupAddressId())
-                .pickupLat(pickupLat)   // <-- SAVED
-                .pickupLng(pickupLng)   // <-- SAVED
-                .pickupAddressLine(request.getPickupAddressLine())
+                .customerId(customerId) // Fixed mapping
+                .pickupAddressId(request.getPickupAddressId())
+                .pickupLat(pickupLat)
+                .pickupLng(pickupLng)
+                .pickupAddressLine(request.getPickupAddressLine()) // Fixed mapping
                 .deliveryAddressId(request.getDeliveryAddressId())
-                .deliveryLat(deliveryLat) // <-- SAVED
-                .deliveryLng(deliveryLng) // <-- SAVED
-                .deliveryAddressLine(request.getDeliveryAddressLine())
+                .deliveryLat(deliveryLat)
+                .deliveryLng(deliveryLng)
+                .deliveryAddressLine(request.getDeliveryAddressLine()) // Fixed mapping
                 .itemName(request.getItemName())
                 .itemWeight(request.getItemWeight())
                 .note(request.getNote())
                 .distanceKm(distanceKm)
-                .deliveryFee(deliveryFee) // Save the original fee
-                .voucherId(appliedVoucherId) // <-- SAVE THE VOUCHER ID
+                .deliveryFee(deliveryFee)
+                .voucherId(appliedVoucherId)
                 .codAmount(cod)
-                .totalAmount(total)       // Save the discounted total
+                .totalAmount(total)
                 .status(OrderStatus.CREATED)
                 .build();
 
@@ -136,19 +143,15 @@ public class OrderServiceImpl implements OrderService {
 
         // 7. Fire Kafka Event
         OrderCreatedEvent event = OrderCreatedEvent.builder()
-            .orderId(savedOrder.getId())
-
-            .pickupAddressId(savedOrder.getPickupAddressId())
-            .deliveryAddressId(savedOrder.getDeliveryAddressId())
-
-            .pickupLat(savedOrder.getPickupLat())
-            .pickupLng(savedOrder.getPickupLng())
-
-            .deliveryLat(savedOrder.getDeliveryLat())
-            .deliveryLng(savedOrder.getDeliveryLng())
-
-            .deliveryFee(savedOrder.getDeliveryFee())
-            .build();
+                .orderId(savedOrder.getId())
+                .pickupAddressId(savedOrder.getPickupAddressId())
+                .deliveryAddressId(savedOrder.getDeliveryAddressId())
+                .pickupLat(savedOrder.getPickupLat())
+                .pickupLng(savedOrder.getPickupLng())
+                .deliveryLat(savedOrder.getDeliveryLat())
+                .deliveryLng(savedOrder.getDeliveryLng())
+                .deliveryFee(savedOrder.getDeliveryFee())
+                .build();
 
         orderEventProducer.publishOrderCreatedEvent(event);
 
@@ -161,37 +164,123 @@ public class OrderServiceImpl implements OrderService {
             response.setFinalDeliveryFee(finalDeliveryFee);
         }
 
-        // --- NEW VNPAY LOGIC ---
-        // If the user requested VNPay, generate the secure URL and attach it to the response!
+        // VNPay Logic
         if ("VNPAY".equalsIgnoreCase(request.getPaymentMethod())) {
             String paymentUrl = vnPayService.createPaymentUrl(savedOrder);
             response.setPaymentUrl(paymentUrl);
         }
-        // -----------------------
 
         return response;
     }
 
     @Override
     public List<OrderResponse> getCustomerOrders(String customerId) {
-        List<Order> orders = orderRepository.findAllByCustomerIdOrderByCreatedAtDesc(customerId);
-        return orders.stream().map(this::mapToResponse).collect(Collectors.toList());
+        return orderRepository.findAllByCustomerIdOrderByCreatedAtDesc(customerId)
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
     }
 
     @Override
     public OrderResponse getOrderById(String orderId, String customerId) {
         Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new RuntimeException("Order not found"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
-        // Security Check: Make sure the person requesting the order actually owns it
-        if (!order.getCustomerId().equals(customerId)) {
-            throw new RuntimeException("Access Denied: This is not your order.");
+        if (!order.getCustomerId().equals(customerId)) { // Fixed mapping
+            throw new BusinessException(ErrorCode.ACTION_NOT_ALLOWED, "Access Denied: This is not your order.");
         }
 
         return mapToResponse(order);
     }
 
-    // Helper Method to convert DB Entity to JSON DTO
+    @Override
+    public List<OrderResponse> getAvailableOrdersForShippers() {
+        return orderRepository.findAllByStatus(OrderStatus.CREATED)
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse acceptOrder(String orderId, String shipperId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        if (order.getStatus() != OrderStatus.CREATED || order.getShipperId() != null) {
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS, "Sorry, this order is no longer available.");
+        }
+
+        order.setShipperId(shipperId);
+        order.setStatus(OrderStatus.ASSIGNED);
+        orderRepository.save(order);
+
+        orderTimelineRepository.save(OrderTimeline.builder()
+                .order(order)
+                .status(OrderStatus.ASSIGNED)
+                .description("Driver has accepted the order and is heading to the pickup location.")
+                .build());
+
+        return mapToResponse(order);
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse updateOrderStatus(String orderId, String shipperId, OrderStatusUpdateRequest request) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        if (!shipperId.equals(order.getShipperId())) {
+            throw new BusinessException(ErrorCode.ACTION_NOT_ALLOWED, "Access Denied: You are not assigned to this delivery.");
+        }
+
+        order.setStatus(request.getStatus());
+        if (request.getPhotoUrl() != null) {
+            order.setDeliveryPhotoUrl(request.getPhotoUrl());
+        }
+        orderRepository.save(order);
+
+        String timelineDesc = request.getNote() != null
+                ? request.getNote()
+                : "Order status updated to " + request.getStatus();
+
+        orderTimelineRepository.save(OrderTimeline.builder()
+                .order(order)
+                .status(request.getStatus())
+                .description(timelineDesc)
+                .build());
+
+        return mapToResponse(order);
+    }
+
+    @Override
+    @Transactional
+    public void cancelOrder(String orderId, String customerId, String reason) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        if (!order.getCustomerId().equals(customerId)) { // Fixed mapping
+            throw new BusinessException(ErrorCode.ACTION_NOT_ALLOWED, "This is not your order.");
+        }
+
+        if (order.getStatus() == OrderStatus.DELIVERED || order.getStatus() == OrderStatus.CANCELLED) {
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS, "Cannot cancel this order.");
+        }
+
+        order.setStatus(OrderStatus.CANCELLED);
+        order.setCancelReason(reason);
+        orderRepository.save(order);
+
+        OrderTimeline timeline = OrderTimeline.builder()
+                .id(UUID.randomUUID().toString())
+                .order(order)
+                .status(OrderStatus.CANCELLED)
+                .description("Order cancelled. Reason: " + reason)
+                .build();
+        orderTimelineRepository.save(timeline);
+    }
+
+    // Manual mapper to easily handle appending the Timeline arrays to the DTO
     private OrderResponse mapToResponse(Order order) {
         List<OrderTimeline> timelines = orderTimelineRepository.findAllByOrderIdOrderByCreatedAtAsc(order.getId());
 
@@ -216,69 +305,5 @@ public class OrderServiceImpl implements OrderService {
                 .createdAt(order.getCreatedAt())
                 .timeline(timelineResponses)
                 .build();
-    }
-
-    @Override
-    public List<OrderResponse> getAvailableOrdersForShippers() {
-        // Find all orders that don't have a driver yet
-        List<Order> orders = orderRepository.findAllByStatus(OrderStatus.CREATED);
-        return orders.stream().map(this::mapToResponse).collect(Collectors.toList());
-    }
-
-    @Override
-    @Transactional
-    public OrderResponse acceptOrder(String orderId, String shipperId) {
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new RuntimeException("Order not found"));
-
-        // Concurrency Check: Make sure another driver didn't snatch it first!
-        if (order.getStatus() != OrderStatus.CREATED || order.getShipperId() != null) {
-            throw new RuntimeException("Sorry, this order is no longer available.");
-        }
-
-        // Assign to this shipper and update status
-        order.setShipperId(shipperId);
-        order.setStatus(OrderStatus.ASSIGNED);
-        orderRepository.save(order);
-
-        // Log to timeline
-        orderTimelineRepository.save(OrderTimeline.builder()
-                .order(order)
-                .status(OrderStatus.ASSIGNED)
-                .description("Driver has accepted the order and is heading to the pickup location.")
-                .build());
-
-        return mapToResponse(order);
-    }
-
-    @Override
-    @Transactional
-    public OrderResponse updateOrderStatus(String orderId, String shipperId, OrderStatusUpdateRequest request) {
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new RuntimeException("Order not found"));
-
-        // Security Check: Only the assigned shipper can update this order!
-        if (!shipperId.equals(order.getShipperId())) {
-            throw new RuntimeException("Access Denied: You are not assigned to this delivery.");
-        }
-
-        order.setStatus(request.getStatus());
-        if (request.getPhotoUrl() != null) {
-            order.setDeliveryPhotoUrl(request.getPhotoUrl());
-        }
-        orderRepository.save(order);
-
-        // Create a dynamic timeline description
-        String timelineDesc = request.getNote() != null
-                ? request.getNote()
-                : "Order status updated to " + request.getStatus();
-
-        orderTimelineRepository.save(OrderTimeline.builder()
-                .order(order)
-                .status(request.getStatus())
-                .description(timelineDesc)
-                .build());
-
-        return mapToResponse(order);
     }
 }

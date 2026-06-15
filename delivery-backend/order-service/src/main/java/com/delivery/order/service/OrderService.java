@@ -10,6 +10,7 @@ public interface OrderService {
     OrderResponse createOrder(OrderRequest request, String customerId);
     List<OrderResponse> getCustomerOrders(String customerId);
     OrderResponse getOrderById(String orderId, String customerId);
+    void cancelOrder(String orderId, String customerId, String reason);
 
     // --- Shipper Methods ---
     List<OrderResponse> getAvailableOrdersForShippers();

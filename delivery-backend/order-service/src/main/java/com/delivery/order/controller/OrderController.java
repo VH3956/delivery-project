@@ -3,15 +3,10 @@ package com.delivery.order.controller;
 import com.delivery.order.dto.OrderRequest;
 import com.delivery.order.dto.OrderResponse;
 import com.delivery.order.dto.OrderStatusUpdateRequest;
+import com.delivery.order.model.ApiResponse;
 import com.delivery.order.service.OrderService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
+import com.delivery.order.util.ResponseUtils;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -22,69 +17,53 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
-@Tag(name = "Orders", description = "Order Management API")
-@SecurityRequirement(name = "bearerAuth")
 public class OrderController {
 
     private final OrderService orderService;
 
-    @Operation(summary = "Create a new order", description = "Customers can create a new delivery order")
-    @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Order created successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid input")
-    })
     @PostMapping
     @PreAuthorize("hasRole('CUSTOMER')")
-    public ResponseEntity<OrderResponse> createOrder(@RequestBody @Valid OrderRequest request, Principal principal) {
-        String customerId = principal.getName();
-        OrderResponse response = orderService.createOrder(request, customerId);
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
+    public ResponseEntity<ApiResponse<OrderResponse>> createOrder(@RequestBody OrderRequest request, Principal principal) {
+        return ResponseEntity.ok(ResponseUtils.success(orderService.createOrder(request, principal.getName())));
     }
 
-    @Operation(summary = "Get my orders", description = "Retrieve order history for the logged-in customer")
-    @GetMapping("/me")
+    @GetMapping("/user/me")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public ResponseEntity<List<OrderResponse>> getMyOrders(Principal principal) {
-        String customerId = principal.getName();
-        return ResponseEntity.ok(orderService.getCustomerOrders(customerId));
+    public ResponseEntity<ApiResponse<List<OrderResponse>>> getMyOrders(Principal principal) {
+        return ResponseEntity.ok(ResponseUtils.success(orderService.getCustomerOrders(principal.getName())));
     }
 
-    @Operation(summary = "Get order details", description = "Get details of a specific order")
     @GetMapping("/{orderId}")
     @PreAuthorize("hasRole('CUSTOMER')")
-    public ResponseEntity<OrderResponse> getOrderDetails(@PathVariable String orderId, Principal principal) {
-        String customerId = principal.getName();
-        return ResponseEntity.ok(orderService.getOrderById(orderId, customerId));
+    public ResponseEntity<ApiResponse<OrderResponse>> getOrderById(@PathVariable String orderId, Principal principal) {
+        return ResponseEntity.ok(ResponseUtils.success(orderService.getOrderById(orderId, principal.getName())));
     }
 
-    // ==========================================
-    // SHIPPER APIs
-    // ==========================================
-
-    @Operation(summary = "Get available orders", description = "Shippers can view all unassigned orders")
+    // Shipper Endpoints
     @GetMapping("/available")
     @PreAuthorize("hasRole('SHIPPER')")
-    public ResponseEntity<List<OrderResponse>> getAvailableOrders() {
-        return ResponseEntity.ok(orderService.getAvailableOrdersForShippers());
+    public ResponseEntity<ApiResponse<List<OrderResponse>>> getAvailableOrders() {
+         return ResponseEntity.ok(ResponseUtils.success(orderService.getAvailableOrdersForShippers()));
     }
 
-    @Operation(summary = "Accept order", description = "Shipper accepts an available order")
     @PatchMapping("/{orderId}/accept")
     @PreAuthorize("hasRole('SHIPPER')")
-    public ResponseEntity<OrderResponse> acceptOrder(@PathVariable String orderId, Principal principal) {
-        String shipperId = principal.getName();
-        return ResponseEntity.ok(orderService.acceptOrder(orderId, shipperId));
+    public ResponseEntity<ApiResponse<OrderResponse>> acceptOrder(@PathVariable String orderId, Principal principal) {
+        return ResponseEntity.ok(ResponseUtils.success(orderService.acceptOrder(orderId, principal.getName())));
     }
 
-    @Operation(summary = "Update order status", description = "Shipper updates order status (Picked Up, In Transit, Delivered)")
     @PatchMapping("/{orderId}/status")
     @PreAuthorize("hasRole('SHIPPER')")
-    public ResponseEntity<OrderResponse> updateOrderStatus(
+    public ResponseEntity<ApiResponse<OrderResponse>> updateOrderStatus(
             @PathVariable String orderId,
-            @RequestBody @Valid OrderStatusUpdateRequest request,
+            @RequestBody OrderStatusUpdateRequest request,
             Principal principal) {
+        return ResponseEntity.ok(ResponseUtils.success(orderService.updateOrderStatus(orderId, principal.getName(), request)));
+    }
 
-        String shipperId = principal.getName();
-        return ResponseEntity.ok(orderService.updateOrderStatus(orderId, shipperId, request));
+    @PostMapping("/{orderId}/cancel")
+    public ResponseEntity<ApiResponse<Void>> cancelOrder(@PathVariable String orderId, @RequestParam String reason, Principal principal) {
+        orderService.cancelOrder(orderId, principal.getName(), reason);
+        return ResponseEntity.ok(ResponseUtils.successMessage("Order cancelled successfully"));
     }
 }
