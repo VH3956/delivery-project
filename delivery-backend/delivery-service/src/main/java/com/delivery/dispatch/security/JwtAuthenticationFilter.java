@@ -1,5 +1,6 @@
 package com.delivery.dispatch.security;
 
+import com.delivery.dispatch.service.TokenBlacklistService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -13,41 +14,45 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final JwtService jwtService;
+    private final JwtTokenHelper jwtTokenHelper;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
 
         final String authHeader = request.getHeader("Authorization");
-        final String jwt;
-        final String userId;
 
-        // If no token, reject immediately
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        jwt = authHeader.substring(7);
+        final String jwt = authHeader.substring(7);
 
-        // Validate token and set security context
-        if (jwtService.isTokenValid(jwt) && SecurityContextHolder.getContext().getAuthentication() == null) {
+        // Block logged-out shippers!
+        if (tokenBlacklistService.isBlacklisted(jwt)) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
+            response.getWriter().write("{\"status\": 401, \"message\": \"Unauthorized: Token has been revoked.\"}");
+            return;
+        }
 
-            userId = jwtService.extractUserId(jwt);
-            String role = jwtService.extractRole(jwt);
+        if (jwtTokenHelper.isTokenValid(jwt) && SecurityContextHolder.getContext().getAuthentication() == null) {
+            String userId = jwtTokenHelper.extractUserId(jwt);
+            List<String> roles = jwtTokenHelper.extractRoles(jwt); // Extract the new Array format!
 
-            // Grant the role (e.g., ROLE_CUSTOMER, ROLE_SHIPPER)
-            var authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role));
+            List<SimpleGrantedAuthority> authorities = roles.stream()
+                    .map(SimpleGrantedAuthority::new)
+                    .collect(Collectors.toList());
 
-            // The 'principal' is now the userId (UUID string)
             UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                     userId, null, authorities
             );

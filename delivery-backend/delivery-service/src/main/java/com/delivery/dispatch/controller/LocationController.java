@@ -1,6 +1,8 @@
 package com.delivery.dispatch.controller;
 
+import com.delivery.dispatch.model.ApiResponse;
 import com.delivery.dispatch.service.LocationTrackingService;
+import com.delivery.dispatch.util.ResponseUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.Data;
@@ -19,7 +21,6 @@ public class LocationController {
 
     private final LocationTrackingService locationTrackingService;
 
-    // The JSON body the phone will send us
     @Data
     public static class LocationUpdateRequest {
         private double longitude;
@@ -30,11 +31,10 @@ public class LocationController {
             description = "Update real-time GPS location of a shipper")
     @PostMapping("/update")
     @PreAuthorize("hasRole('SHIPPER')") // Only verified Shippers can call this
-    public ResponseEntity<String> updateLocation(
+    public ResponseEntity<ApiResponse<Void>> updateLocation(
             @RequestBody LocationUpdateRequest request,
-            Principal principal) { // Spring automatically injects the token data here!
+            Principal principal) { 
 
-        // Extract the real, un-fakeable ID from the Token
         String shipperId = principal.getName();
 
         locationTrackingService.updateDriverLocation(
@@ -42,6 +42,8 @@ public class LocationController {
                 request.getLongitude(),
                 request.getLatitude()
         );
-        return ResponseEntity.ok("Location updated for Shipper: " + shipperId);
+        
+        // Wrap the response in our standard format
+        return ResponseEntity.ok(ResponseUtils.success("Location updated for Shipper: " + shipperId));
     }
 }
