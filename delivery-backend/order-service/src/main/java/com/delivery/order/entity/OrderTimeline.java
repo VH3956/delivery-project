@@ -29,7 +29,7 @@ public class OrderTimeline {
     @Column(nullable = false)
     private OrderStatus status;
 
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String description;
 
     @CreationTimestamp

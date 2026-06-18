@@ -70,7 +70,7 @@ public class Order {
     @Column(name = "item_weight", precision = 5, scale = 2)
     private BigDecimal itemWeight;
 
-    @Column(name = "note")
+    @Column(name = "note", columnDefinition = "TEXT")
     private String note;
 
     // Financials & Delivery Metrics
@@ -91,7 +91,7 @@ public class Order {
     @Column(name = "delivery_photo_url")
     private String deliveryPhotoUrl;
 
-    @Column(name = "cancel_reason")
+    @Column(name = "cancel_reason", columnDefinition = "TEXT")
     private String cancelReason;
 
     @CreationTimestamp

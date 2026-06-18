@@ -14,6 +14,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+
 @Component
 @RequiredArgsConstructor
 public class DatabaseSeeder implements CommandLineRunner {
@@ -41,7 +43,9 @@ public class DatabaseSeeder implements CommandLineRunner {
         if (userRepository.count() == 0) {
             System.out.println("🌱 Seeding initial database records with role mappings...");
 
-            // Create an Admin User
+            // ==========================================
+            // 1. Create the Admin User
+            // ==========================================
             User admin = User.builder()
                     .phone("0999999999")
                     .email("admin@delivery.com")
@@ -53,7 +57,23 @@ public class DatabaseSeeder implements CommandLineRunner {
             User savedAdmin = userRepository.save(admin);
             userRoleRepository.save(UserRole.builder().user(savedAdmin).role(adminRole).build());
 
-            // Create a Customer User
+            // 🌟 THE FIX: Attach a "System Support" Shipper Profile to the Admin!
+            // Now, if the Admin accepts an order, the frontend won't crash.
+            ShipperProfile adminShipperProfile = ShipperProfile.builder()
+                    .user(savedAdmin)
+                    .identityCardNumber("SYS-ADMIN-001")
+                    .drivingLicense("SYSTEM-SUPPORT")
+                    .vehiclePlate("HỖ TRỢ CSKH") // Frontend displays this!
+                    .rating(new BigDecimal("5.0"))
+                    .isApproved(true) // Must be true to bypass approval checks
+                    .isOnline(true)   // Always ready
+                    .build();
+            shipperProfileRepository.save(adminShipperProfile);
+
+
+            // ==========================================
+            // 2. Create a Customer User
+            // ==========================================
             User customer = User.builder()
                     .phone("0111111111")
                     .email("customer@delivery.com")
@@ -65,7 +85,10 @@ public class DatabaseSeeder implements CommandLineRunner {
             User savedCustomer = userRepository.save(customer);
             userRoleRepository.save(UserRole.builder().user(savedCustomer).role(customerRole).build());
 
-            // Create a Shipper User
+
+            // ==========================================
+            // 3. Create a Regular Shipper User
+            // ==========================================
             User shipperUser = User.builder()
                     .phone("0888888888")
                     .email("shipper@delivery.com")
@@ -77,12 +100,12 @@ public class DatabaseSeeder implements CommandLineRunner {
             User savedShipperUser = userRepository.save(shipperUser);
             userRoleRepository.save(UserRole.builder().user(savedShipperUser).role(shipperRole).build());
 
-            // Bind the matching profile documents for logistics delivery operations
             ShipperProfile shipperProfile = ShipperProfile.builder()
                     .user(savedShipperUser)
                     .identityCardNumber("001089123456")
                     .drivingLicense("A1-987654321")
                     .vehiclePlate("29A1-123.45")
+                    .rating(new BigDecimal("4.8"))
                     .isApproved(false) // Set true so it's immediately ready for test cycles
                     .isOnline(false)
                     .build();

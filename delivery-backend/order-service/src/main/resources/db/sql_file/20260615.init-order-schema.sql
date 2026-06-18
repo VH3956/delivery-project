@@ -27,13 +27,13 @@ CREATE TABLE orders (
     
     item_name VARCHAR(255) NOT NULL,
     item_weight DECIMAL(5, 2),
-    note VARCHAR(255),
+    note TEXT,
     distance_km DECIMAL(6, 2),
     delivery_fee DECIMAL(10, 2) NOT NULL,
     cod_amount DECIMAL(10, 2),
     total_amount DECIMAL(10, 2),
     delivery_photo_url VARCHAR(255),
-    cancel_reason VARCHAR(255),
+    cancel_reason TEXT,
     created_at TIMESTAMP(6),
     updated_at TIMESTAMP(6)
 );
@@ -46,7 +46,7 @@ CREATE TABLE order_timelines (
     -- FIXED: Use MySQL ENUM instead of VARCHAR
     status ENUM('CREATED', 'PAID', 'ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED', 'CANCELLED') NOT NULL,
     
-    description VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
     created_at TIMESTAMP(6),
     CONSTRAINT fk_timeline_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
 );
