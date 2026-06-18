@@ -16,7 +16,7 @@ import java.security.Principal;
 @RestController
 @RequestMapping("/api/shippers")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('SHIPPER')")
+@PreAuthorize("hasAnyRole('SHIPPER', 'ADMIN')") // Only SHIPPERs and ADMINs can access these endpoints
 public class ShipperController {
 
     private final ShipperService shipperService;

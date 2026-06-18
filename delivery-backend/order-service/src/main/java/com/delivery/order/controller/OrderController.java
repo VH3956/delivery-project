@@ -22,38 +22,38 @@ public class OrderController {
     private final OrderService orderService;
 
     @PostMapping
-    @PreAuthorize("hasRole('CUSTOMER')")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public ResponseEntity<ApiResponse<OrderResponse>> createOrder(@RequestBody OrderRequest request, Principal principal) {
         return ResponseEntity.ok(ResponseUtils.success(orderService.createOrder(request, principal.getName())));
     }
 
     @GetMapping("/user/me")
-    @PreAuthorize("hasRole('CUSTOMER')")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public ResponseEntity<ApiResponse<List<OrderResponse>>> getMyOrders(Principal principal) {
         return ResponseEntity.ok(ResponseUtils.success(orderService.getCustomerOrders(principal.getName())));
     }
 
     @GetMapping("/{orderId}")
-    @PreAuthorize("hasRole('CUSTOMER')")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public ResponseEntity<ApiResponse<OrderResponse>> getOrderById(@PathVariable String orderId, Principal principal) {
         return ResponseEntity.ok(ResponseUtils.success(orderService.getOrderById(orderId, principal.getName())));
     }
 
     // Shipper Endpoints
     @GetMapping("/available")
-    @PreAuthorize("hasRole('SHIPPER')")
+    @PreAuthorize("hasAnyRole('SHIPPER', 'ADMIN')")
     public ResponseEntity<ApiResponse<List<OrderResponse>>> getAvailableOrders() {
          return ResponseEntity.ok(ResponseUtils.success(orderService.getAvailableOrdersForShippers()));
     }
 
     @PatchMapping("/{orderId}/accept")
-    @PreAuthorize("hasRole('SHIPPER')")
+    @PreAuthorize("hasAnyRole('SHIPPER', 'ADMIN')")
     public ResponseEntity<ApiResponse<OrderResponse>> acceptOrder(@PathVariable String orderId, Principal principal) {
         return ResponseEntity.ok(ResponseUtils.success(orderService.acceptOrder(orderId, principal.getName())));
     }
 
     @PatchMapping("/{orderId}/status")
-    @PreAuthorize("hasRole('SHIPPER')")
+    @PreAuthorize("hasAnyRole('SHIPPER', 'ADMIN')")
     public ResponseEntity<ApiResponse<OrderResponse>> updateOrderStatus(
             @PathVariable String orderId,
             @RequestBody OrderStatusUpdateRequest request,
@@ -62,6 +62,7 @@ public class OrderController {
     }
 
     @PostMapping("/{orderId}/cancel")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public ResponseEntity<ApiResponse<Void>> cancelOrder(@PathVariable String orderId, @RequestParam String reason, Principal principal) {
         orderService.cancelOrder(orderId, principal.getName(), reason);
         return ResponseEntity.ok(ResponseUtils.successMessage("Order cancelled successfully"));

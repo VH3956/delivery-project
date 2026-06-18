@@ -30,7 +30,7 @@ public class LocationController {
     @Operation(summary = "Update shipper location",
             description = "Update real-time GPS location of a shipper")
     @PostMapping("/update")
-    @PreAuthorize("hasRole('SHIPPER')") // Only verified Shippers can call this
+    @PreAuthorize("hasAnyRole('SHIPPER', 'ADMIN')") // Only verified Shippers and ADMINs can call this
     public ResponseEntity<ApiResponse<Void>> updateLocation(
             @RequestBody LocationUpdateRequest request,
             Principal principal) { 

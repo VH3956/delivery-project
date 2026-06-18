@@ -35,9 +35,9 @@ public class ShipperServiceImpl implements ShipperService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         List<UserRole> roles = userRoleRepository.findByUserId(userId);
-        boolean isShipper = roles.stream().anyMatch(ur -> ur.getRole().getName().equals("ROLE_SHIPPER"));
+        boolean isShipper = roles.stream().anyMatch(ur -> ur.getRole().getName().equals("ROLE_SHIPPER") || ur.getRole().getName().equals("ROLE_ADMIN"));
         if (!isShipper) {
-            throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR, "User does not hold shipper permissions.");
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND, "User does not hold shipper permissions.");
         }
 
         if (shipperProfileRepository.findByUserId(userId).isPresent()) {
@@ -62,7 +62,7 @@ public class ShipperServiceImpl implements ShipperService {
     @Override
     public ShipperProfileResponse getMyShipperProfile(String userId) {
         ShipperProfile profile = shipperProfileRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR, "Shipper profile not found."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "Shipper profile not found."));
         return shipperMapper.toDto(profile);
     }
 
@@ -93,7 +93,7 @@ public class ShipperServiceImpl implements ShipperService {
     @Transactional
     public ShipperProfileResponse approveShipperProfile(String profileId, boolean isApproved) {
         ShipperProfile profile = shipperProfileRepository.findById(profileId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR, "Shipper profile not found."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "Shipper profile not found."));
 
         profile.setApproved(isApproved);
         ShipperProfile updatedProfile = shipperProfileRepository.save(profile);
