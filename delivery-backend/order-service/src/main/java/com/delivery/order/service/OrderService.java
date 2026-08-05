@@ -16,4 +16,5 @@ public interface OrderService {
     List<OrderResponse> getAvailableOrdersForShippers();
     OrderResponse acceptOrder(String orderId, String shipperId);
     OrderResponse updateOrderStatus(String orderId, String shipperId, OrderStatusUpdateRequest request);
+    OrderResponse dropOrder(String orderId, String shipperId, String reason);
 }

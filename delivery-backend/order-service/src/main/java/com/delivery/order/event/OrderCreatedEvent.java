@@ -26,4 +26,6 @@ public class OrderCreatedEvent {
     private Double deliveryLng;
 
     private BigDecimal deliveryFee;
+
+    private String droppedShipperId;
 }

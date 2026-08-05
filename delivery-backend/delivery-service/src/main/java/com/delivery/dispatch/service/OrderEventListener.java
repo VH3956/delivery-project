@@ -1,13 +1,16 @@
 package com.delivery.dispatch.service;
 
-import com.delivery.dispatch.event.OrderCreatedEvent;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.util.List;
+import java.util.stream.Collectors;
+
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import com.delivery.dispatch.event.OrderCreatedEvent;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
@@ -57,18 +60,34 @@ public class OrderEventListener {
 
         log.info("📍 Pickup Coordinates: [{}, {}]", longitude, latitude);
 
+        // 1. If this event contains a dropped driver, permanently blacklist them in Redis for this order!
+        if (event.getDroppedShipperId() != null) {
+            locationTrackingService.blacklistDriverForOrder(event.getOrderId(), event.getDroppedShipperId());
+        }
+
         // 2. Ask Redis for all drivers within a 5km radius
         double searchRadiusKm = 5.0;
         List<String> nearbyDrivers = locationTrackingService.findNearbyDrivers(longitude, latitude, searchRadiusKm);
 
+        // 3. Filter and Prioritize
+        List<String> prioritizedDrivers = nearbyDrivers.stream()
+                // 🚀 THE FIX: Check the Redis Blacklist instead of just the event payload!
+                .filter(driverId -> !locationTrackingService.isDriverBlacklistedForOrder(event.getOrderId(), driverId))
+                .sorted((d1, d2) -> Double.compare(
+                        locationTrackingService.getShipperRating(d2), 
+                        locationTrackingService.getShipperRating(d1)
+                ))
+                .limit(3) 
+                .collect(Collectors.toList());
+
         // 3. Dispatch!
-        if (nearbyDrivers.isEmpty()) {
+        if (prioritizedDrivers.isEmpty()) {
             log.warn("⚠️ No drivers found within {}km of the pickup location.", searchRadiusKm);
             // In a real app, you might wait 30 seconds and retry, or expand the radius to 10km!
         } else {
-            log.info("✅ Found {} drivers nearby!", nearbyDrivers.size());
+            log.info("✅ Found {} drivers nearby!", prioritizedDrivers.size());
 
-            for (String driverId : nearbyDrivers) {
+            for (String driverId : prioritizedDrivers) {
                 log.info(" 🚀 PUSHING REAL-TIME WEBSOCKET NOTIFICATION TO: {}", driverId);
 
                 // It sends the Order ID down the exact tunnel the Shipper is listening to.

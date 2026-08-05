@@ -13,4 +13,8 @@ public interface UserServiceClient {
     @GetMapping("/api/internal/addresses/{addressId}/coordinates")
     AddressCoordinatesDto getCoordinates(@PathVariable("addressId") String addressId);
 
+    // --- NEW: Fetch Rating ---
+    @GetMapping("/api/internal/shippers/{shipperId}/rating")
+    Double getShipperRating(@PathVariable("shipperId") String shipperId);
+
 }

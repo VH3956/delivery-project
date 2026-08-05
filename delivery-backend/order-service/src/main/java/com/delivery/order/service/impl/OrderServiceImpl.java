@@ -306,4 +306,51 @@ public class OrderServiceImpl implements OrderService {
                 .timeline(timelineResponses)
                 .build();
     }
+
+    @Override
+    @Transactional
+    public OrderResponse dropOrder(String orderId, String shipperId, String reason) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        if (!shipperId.equals(order.getShipperId())) {
+            throw new BusinessException(ErrorCode.ACTION_NOT_ALLOWED, "You are not assigned to this delivery.");
+        }
+
+        if (order.getStatus() == OrderStatus.DELIVERED || order.getStatus() == OrderStatus.COMPLETED) {
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS, "Cannot drop a completed order.");
+        }
+
+        // Capture the ID before we set it to null!
+        String droppedId = order.getShipperId(); 
+
+        // 1. Detach the current shipper and reset status
+        order.setShipperId(null);
+        order.setStatus(OrderStatus.CREATED);
+        orderRepository.save(order);
+
+        // 2. Log it
+        orderTimelineRepository.save(OrderTimeline.builder()
+                .order(order)
+                .status(OrderStatus.CREATED)
+                .description("Shipper dropped the order. Reason: " + reason + ". Looking for new shipper...")
+                .build());
+
+        // 3. Fire the Kafka Event WITH the droppedShipperId
+        OrderCreatedEvent event = OrderCreatedEvent.builder()
+                .orderId(order.getId())
+                .pickupAddressId(order.getPickupAddressId())
+                .deliveryAddressId(order.getDeliveryAddressId())
+                .pickupLat(order.getPickupLat())
+                .pickupLng(order.getPickupLng())
+                .deliveryLat(order.getDeliveryLat())
+                .deliveryLng(order.getDeliveryLng())
+                .deliveryFee(order.getDeliveryFee())
+                .droppedShipperId(droppedId) // <--- ADD THIS HERE!
+                .build();
+                
+        orderEventProducer.publishOrderCreatedEvent(event);
+
+        return mapToResponse(order);
+    }
 }

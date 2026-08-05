@@ -6,6 +6,8 @@ import com.delivery.order.dto.OrderStatusUpdateRequest;
 import com.delivery.order.model.ApiResponse;
 import com.delivery.order.service.OrderService;
 import com.delivery.order.util.ResponseUtils;
+
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -59,6 +61,17 @@ public class OrderController {
             @RequestBody OrderStatusUpdateRequest request,
             Principal principal) {
         return ResponseEntity.ok(ResponseUtils.success(orderService.updateOrderStatus(orderId, principal.getName(), request)));
+    }
+
+    @Operation(summary = "Drop order", description = "Shipper drops an accepted order, returning it to the pool for re-assignment")
+    @PostMapping("/{orderId}/drop")
+    @PreAuthorize("hasAnyRole('SHIPPER', 'ADMIN')")
+    public ResponseEntity<ApiResponse<OrderResponse>> dropOrder(
+            @PathVariable String orderId,
+            @RequestParam String reason,
+            Principal principal) {
+            
+        return ResponseEntity.ok(ResponseUtils.success(orderService.dropOrder(orderId, principal.getName(), reason)));
     }
 
     @PostMapping("/{orderId}/cancel")
