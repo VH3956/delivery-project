@@ -38,6 +38,12 @@ import com.delivery.order.dto.AdminDashboardStatsResponse;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.delivery.order.entity.Transaction;
+import com.delivery.order.enums.PaymentMethod;
+import com.delivery.order.enums.TransactionStatus;
+import com.delivery.order.enums.TransactionType;
+import com.delivery.order.repository.TransactionRepository;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -50,6 +56,7 @@ public class OrderServiceImpl implements OrderService {
     private final DistanceCalculationService distanceCalculationService;
     private final VoucherRepository voucherRepository;
     private final VNPayService vnPayService;
+    private final TransactionRepository transactionRepository;
 
     @Override
     @Transactional
@@ -149,6 +156,17 @@ public class OrderServiceImpl implements OrderService {
                 .build();
         orderTimelineRepository.save(initialTimeline);
 
+        // PAY-05: CREATE INITIAL LEDGER ENTRY
+        boolean isOnlinePayment = "VNPAY".equalsIgnoreCase(request.getPaymentMethod());
+        Transaction paymentTxn = Transaction.builder()
+                .orderId(savedOrder.getId())
+                .transactionType(TransactionType.PAYMENT)
+                .paymentMethod(isOnlinePayment ? PaymentMethod.VNPAY : PaymentMethod.COD)
+                .amount(total)
+                .status(TransactionStatus.PENDING) // Remains pending until IPN (VNPay) or Shipper confirms (COD)
+                .build();
+        transactionRepository.save(paymentTxn);
+
         // 7. Fire Kafka Event
         OrderCreatedEvent event = OrderCreatedEvent.builder()
                 .orderId(savedOrder.getId())
@@ -242,6 +260,37 @@ public class OrderServiceImpl implements OrderService {
             throw new BusinessException(ErrorCode.ACTION_NOT_ALLOWED, "Access Denied: You are not assigned to this delivery.");
         }
 
+        // PRI-05: RETURN FEE LOGIC (Failed Delivery)
+        // If the shipper already picked up the item, but updates status to CANCELLED (e.g. customer refused item)
+        if (request.getStatus() == OrderStatus.CANCELLED 
+                && (order.getStatus() == OrderStatus.PICKED_UP || order.getStatus() == OrderStatus.IN_TRANSIT)) {
+            
+            // Charge a 50% return fee based on the original delivery fee
+            BigDecimal returnFee = order.getDeliveryFee().multiply(new BigDecimal("0.5")).setScale(0, RoundingMode.HALF_UP);
+            
+            Transaction returnFeeTxn = Transaction.builder()
+                    .orderId(order.getId())
+                    .transactionType(TransactionType.RETURN_FEE)
+                    .paymentMethod(PaymentMethod.COD) // Customer must pay Shipper in cash to get their failed item back
+                    .amount(returnFee)
+                    .status(TransactionStatus.PENDING)
+                    .build();
+            transactionRepository.save(returnFeeTxn);
+            
+            request.setNote((request.getNote() != null ? request.getNote() : "Delivery failed.") + " Return fee applied: " + returnFee + " VND.");
+        }
+
+        // PAY-05: CONFIRM COD CASH HANDOFF ON DELIVERY
+        if (request.getStatus() == OrderStatus.COMPLETED) {
+            transactionRepository.findByOrderId(orderId).stream()
+                    .filter(t -> t.getTransactionType() == TransactionType.PAYMENT && t.getPaymentMethod() == PaymentMethod.COD)
+                    .findFirst()
+                    .ifPresent(txn -> {
+                        txn.setStatus(TransactionStatus.SUCCESS);
+                        transactionRepository.save(txn);
+                    });
+        }
+
         order.setStatus(request.getStatus());
         if (request.getPhotoUrl() != null) {
             order.setDeliveryPhotoUrl(request.getPhotoUrl());
@@ -275,6 +324,18 @@ public class OrderServiceImpl implements OrderService {
             throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS, "Cannot cancel this order.");
         }
 
+        boolean wasPaid = (order.getStatus() == OrderStatus.PAID); //Capture the state first
+        
+        if (wasPaid) {
+            // Find the successful payment in the ledger
+            transactionRepository.findByOrderId(orderId).stream()
+                    .filter(t -> t.getTransactionType() == TransactionType.PAYMENT 
+                            && t.getPaymentMethod() == PaymentMethod.VNPAY 
+                            && t.getStatus() == TransactionStatus.SUCCESS)
+                    .findFirst()
+                    .ifPresent(paymentTxn -> vnPayService.processRefund(order, paymentTxn.getAmount()));
+        }
+        
         order.setStatus(OrderStatus.CANCELLED);
         order.setCancelReason(reason);
         orderRepository.save(order);
@@ -283,7 +344,9 @@ public class OrderServiceImpl implements OrderService {
                 .id(UUID.randomUUID().toString())
                 .order(order)
                 .status(OrderStatus.CANCELLED)
-                .description("Order cancelled. Reason: " + reason)
+                .description(wasPaid ?  // ✅ USE THE BOOLEAN VARIABLE HERE!
+                    "Order cancelled. Reason: " + reason + ". Refund initiated." : 
+                    "Order cancelled. Reason: " + reason)
                 .build();
         orderTimelineRepository.save(timeline);
     }

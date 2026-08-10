@@ -50,3 +50,17 @@ CREATE TABLE IF NOT EXISTS order_timelines (
     created_at TIMESTAMP(6),
     CONSTRAINT fk_timeline_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
 );
+
+-- 4. Create Transactions Table
+CREATE TABLE IF NOT EXISTS transactions (
+    id VARCHAR(36) PRIMARY KEY,
+    order_id VARCHAR(36) NOT NULL,
+    transaction_type ENUM('PAYMENT', 'REFUND', 'RETURN_FEE') NOT NULL,
+    payment_method ENUM('COD', 'VNPAY') NOT NULL,
+    amount DECIMAL(10, 2) NOT NULL,
+    status ENUM('PENDING', 'SUCCESS', 'FAILED') NOT NULL,
+    reference_id VARCHAR(255), -- Stores VNPay Transaction No. or Refund Request ID
+    created_at TIMESTAMP(6),
+    updated_at TIMESTAMP(6),
+    CONSTRAINT fk_transaction_order FOREIGN KEY (order_id) REFERENCES orders(id)
+);

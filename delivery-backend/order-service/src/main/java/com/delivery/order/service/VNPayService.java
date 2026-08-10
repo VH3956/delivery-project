@@ -12,6 +12,13 @@ import com.delivery.order.repository.OrderTimelineRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import com.delivery.order.entity.Transaction;
+import com.delivery.order.enums.PaymentMethod;
+import com.delivery.order.enums.TransactionStatus;
+import com.delivery.order.enums.TransactionType;
+import com.delivery.order.repository.TransactionRepository;
+
+import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
@@ -24,6 +31,7 @@ public class VNPayService {
 
     private final OrderRepository orderRepository;
     private final OrderTimelineRepository orderTimelineRepository;
+    private final TransactionRepository transactionRepository;
 
     @Value("${vnpay.tmn-code:DUMMY_TMN}")
     private String vnpTmnCode;
@@ -141,6 +149,7 @@ public class VNPayService {
 
             // 4. Find the order
             String orderId = params.get("vnp_TxnRef");
+            String vnp_TransactionNo = params.get("vnp_TransactionNo"); // VNPay's unique banking ID
             Order order = orderRepository.findById(orderId).orElse(null);
 
             if (order == null) {
@@ -153,20 +162,30 @@ public class VNPayService {
             String responseCode = params.get("vnp_ResponseCode");
             if ("00".equals(responseCode)) {
                 
-                // Only update if it hasn't been updated already!
+                // 🌟 PAY-05: UPDATE THE LEDGER TRANSACTION TO SUCCESS
+                Transaction txn = transactionRepository.findByOrderId(orderId).stream()
+                        .filter(t -> t.getTransactionType() == TransactionType.PAYMENT)
+                        .findFirst().orElse(null);
+
+                if (txn != null && txn.getStatus() == TransactionStatus.PENDING) {
+                    txn.setStatus(TransactionStatus.SUCCESS);
+                    txn.setReferenceId(vnp_TransactionNo); // Save VNPay Banking Ref for auditing
+                    transactionRepository.save(txn);
+                }
+
                 if (order.getStatus() == OrderStatus.CREATED) {
                     order.setStatus(OrderStatus.PAID);
                     orderRepository.save(order);
-
-                    OrderTimeline timeline = OrderTimeline.builder()
+                    orderTimelineRepository.save(OrderTimeline.builder()
                             .order(order)
                             .status(OrderStatus.PAID)
-                            .description("VNPay payment successful.")
-                            .build();
-                    orderTimelineRepository.save(timeline);
-
+                            .description("VNPay payment successful. Transaction No: " + vnp_TransactionNo)
+                            .build());
                     log.info("✅ Order {} marked as PAID via VNPay IPN!", orderId);
                 }
+
+            response.put("RspCode", "00");
+            response.put("Message", "Confirm Success");
             } else {
                 log.warn("⚠️ VNPay returned payment failure code: {}", responseCode);
             }
@@ -181,5 +200,25 @@ public class VNPayService {
             response.put("Message", "Unknown error");
         }
         return response;
+    }
+
+    // 🌟 PAY-04: REFUND LOGIC
+    public void processRefund(Order order, BigDecimal refundAmount) {
+        log.info("💸 Initiating VNPay Refund for Order ID: {} | Amount: {}", order.getId(), refundAmount);
+        
+        // In a production environment, you would use RestTemplate/WebClient here to POST 
+        // to the VNPay Refund API endpoint. For now, we simulate a successful API call.
+
+        Transaction refundTxn = Transaction.builder()
+                .orderId(order.getId())
+                .transactionType(TransactionType.REFUND)
+                .paymentMethod(PaymentMethod.VNPAY)
+                .amount(refundAmount)
+                .status(TransactionStatus.SUCCESS) 
+                .referenceId("REFUND-" + UUID.randomUUID().toString().substring(0, 8)) // Mocked VNPay Refund Ref
+                .build();
+        
+        transactionRepository.save(refundTxn);
+        log.info("✅ VNPay Refund Recorded in Ledger for Order ID: {}", order.getId());
     }
 }
