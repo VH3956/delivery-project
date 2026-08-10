@@ -15,6 +15,11 @@ import com.delivery.user.service.ShipperService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.delivery.user.entity.ShipperReview;
+import com.delivery.user.repository.ShipperReviewRepository;
+import com.delivery.user.dto.ReviewRequest;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -27,6 +32,7 @@ public class ShipperServiceImpl implements ShipperService {
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
     private final ShipperMapper shipperMapper; // Inject MapStruct!
+    private final ShipperReviewRepository shipperReviewRepository;
 
     @Override
     @Transactional
@@ -98,5 +104,37 @@ public class ShipperServiceImpl implements ShipperService {
         profile.setApproved(isApproved);
         ShipperProfile updatedProfile = shipperProfileRepository.save(profile);
         return shipperMapper.toDto(updatedProfile);
+    }
+
+    @Transactional
+    public void submitReview(String customerId, String shipperId, ReviewRequest request) {
+        
+        // 1. Check if shipper exists
+        ShipperProfile profile = shipperProfileRepository.findByUserId(shipperId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND, "Shipper not found"));
+
+        // 2. Check for duplicate reviews on the same order
+        if (shipperReviewRepository.existsByOrderId(request.getOrderId())) {
+            throw new BusinessException(ErrorCode.ACTION_NOT_ALLOWED, "You have already reviewed this order.");
+        }
+
+        // 3. Save the Review
+        ShipperReview review = ShipperReview.builder()
+                .shipperId(shipperId)
+                .customerId(customerId)
+                .orderId(request.getOrderId())
+                .rating(request.getRating())
+                .comment(request.getComment())
+                .build();
+        shipperReviewRepository.save(review);
+
+        // 4. Recalculate the Average Rating and Update the Profile
+        Double newAverage = shipperReviewRepository.calculateAverageRatingByShipperId(shipperId).orElse(5.0);
+        
+        // Round to 1 decimal place (e.g., 4.7)
+        BigDecimal roundedRating = new BigDecimal(newAverage).setScale(1, RoundingMode.HALF_UP);
+        profile.setRating(roundedRating);
+        
+        shipperProfileRepository.save(profile);
     }
 }

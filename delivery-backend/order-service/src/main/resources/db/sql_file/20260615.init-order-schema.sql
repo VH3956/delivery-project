@@ -1,5 +1,5 @@
 -- 1. Create Vouchers Table
-CREATE TABLE vouchers (
+CREATE TABLE IF NOT EXISTS vouchers (
     id VARCHAR(36) PRIMARY KEY,
     code VARCHAR(255) NOT NULL UNIQUE,
     discount_amount DECIMAL(10, 2) NOT NULL,
@@ -8,7 +8,7 @@ CREATE TABLE vouchers (
 );
 
 -- 2. Create Orders Table
-CREATE TABLE orders (
+CREATE TABLE IF NOT EXISTS orders (
     id VARCHAR(36) PRIMARY KEY,
     customer_id VARCHAR(255) NOT NULL,
     shipper_id VARCHAR(255),
@@ -39,7 +39,7 @@ CREATE TABLE orders (
 );
 
 -- 3. Create Order Timelines Table
-CREATE TABLE order_timelines (
+CREATE TABLE IF NOT EXISTS order_timelines (
     id VARCHAR(36) PRIMARY KEY,
     order_id VARCHAR(36) NOT NULL,
     

@@ -30,6 +30,14 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import com.delivery.order.dto.AdminDashboardStatsResponse;
+import java.util.HashMap;
+import java.util.Map;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -352,5 +360,56 @@ public class OrderServiceImpl implements OrderService {
         orderEventProducer.publishOrderCreatedEvent(event);
 
         return mapToResponse(order);
+    }
+
+    // --- ADM-04: QUẢN LÝ ĐƠN (VIEW ALL ORDERS) ---
+    @Override
+    public Page<OrderResponse> getAllOrdersForAdmin(int page, int size, OrderStatus status) {
+        // Sort by newest first
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        
+        Page<Order> ordersPage = (status != null) ? 
+                orderRepository.findByStatus(status, pageable) : 
+                orderRepository.findAll(pageable);
+
+        // Convert Page<Order> to Page<OrderResponse>
+        return ordersPage.map(this::mapToResponse); // Assumes you have a mapToResponse(Order order) method
+    }
+
+    // --- ADM-06: THỐNG KÊ (DASHBOARD) ---
+    @Override
+    public AdminDashboardStatsResponse getDashboardStatistics() {
+        long totalOrders = orderRepository.count();
+        
+        BigDecimal revenue = orderRepository.sumTotalRevenue();
+        if (revenue == null) {
+            revenue = BigDecimal.ZERO;
+        }
+
+        // Process the Group By Query
+        List<Object[]> statusCounts = orderRepository.countOrdersByStatus();
+        Map<String, Long> byStatus = new HashMap<>();
+        long completed = 0;
+        long cancelled = 0;
+
+        for (Object[] row : statusCounts) {
+            String orderStatus = row[0].toString();
+            Long count = (Long) row[1];
+            byStatus.put(orderStatus, count);
+
+            if (OrderStatus.COMPLETED.name().equals(orderStatus)) {
+                completed = count;
+            } else if (OrderStatus.CANCELLED.name().equals(orderStatus)) {
+                cancelled = count;
+            }
+        }
+
+        return AdminDashboardStatsResponse.builder()
+                .totalOrders(totalOrders)
+                .totalRevenue(revenue)
+                .completedOrders(completed)
+                .cancelledOrders(cancelled)
+                .ordersByStatus(byStatus)
+                .build();
     }
 }

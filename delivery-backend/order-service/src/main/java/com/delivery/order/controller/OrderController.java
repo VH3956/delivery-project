@@ -16,6 +16,10 @@ import org.springframework.web.bind.annotation.*;
 import java.security.Principal;
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import com.delivery.order.dto.AdminDashboardStatsResponse;
+import com.delivery.order.enums.OrderStatus;
+
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
@@ -79,5 +83,27 @@ public class OrderController {
     public ResponseEntity<ApiResponse<Void>> cancelOrder(@PathVariable String orderId, @RequestParam String reason, Principal principal) {
         orderService.cancelOrder(orderId, principal.getName(), reason);
         return ResponseEntity.ok(ResponseUtils.successMessage("Order cancelled successfully"));
+    }
+
+    // ==========================================
+    // ADMIN ENDPOINTS (ADM-04 & ADM-06)
+    // ==========================================
+
+    @Operation(summary = "Get all orders (Admin)", description = "ADM-04: View all orders with pagination and optional status filter")
+    @GetMapping("/admin/all")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<Page<OrderResponse>>> getAllOrdersForAdmin(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) OrderStatus status) {
+            
+        return ResponseEntity.ok(ResponseUtils.success(orderService.getAllOrdersForAdmin(page, size, status)));
+    }
+
+    @Operation(summary = "Get Dashboard Stats", description = "ADM-06: Revenue and order statistics for Admin Dashboard")
+    @GetMapping("/admin/dashboard-stats")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<AdminDashboardStatsResponse>> getDashboardStats() {
+        return ResponseEntity.ok(ResponseUtils.success(orderService.getDashboardStatistics()));
     }
 }

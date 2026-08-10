@@ -1,5 +1,6 @@
 package com.delivery.user.service;
 
+import com.delivery.user.dto.ReviewRequest;
 import com.delivery.user.dto.ShipperProfileResponse;
 import com.delivery.user.dto.ShipperRegistrationRequest;
 import java.util.List;
@@ -10,4 +11,5 @@ public interface ShipperService {
     ShipperProfileResponse toggleOnlineStatus(String userId);
     List<ShipperProfileResponse> getPendingProfiles();
     ShipperProfileResponse approveShipperProfile(String profileId, boolean isApproved);
+    void submitReview(String customerId, String shipperId, ReviewRequest request);
 }
